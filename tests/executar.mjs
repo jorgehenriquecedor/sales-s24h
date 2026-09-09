@@ -3,7 +3,7 @@
  */
 const suites = [
   ["Lógica de filtros, períodos e valores", "./logica.test.mts"],
-  ["Exportação de relatório em CSV", "./csv.test.mts"],
+  ["Exportação de relatório em PDF", "./pdf.test.mts"],
   ["Schema do banco (Postgres real via PGlite)", "./schema.test.mjs"],
 ];
 

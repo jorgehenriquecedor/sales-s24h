@@ -72,7 +72,7 @@ export default async function PaginaInicio({
               className="inline-flex items-center justify-center gap-2 rounded-full border border-borda-forte bg-white px-4 py-2 text-sm font-medium text-tinta shadow-sm transition-colors hover:border-neutro-fraco hover:bg-papel"
             >
               <IconeBaixar className="h-4 w-4" />
-              Exportar relatório
+              Exportar PDF
             </a>
           ) : undefined
         }
@@ -167,7 +167,7 @@ function TabelaComposicao({
             href={`/api/relatorio${montarQuery(filtros)}`}
             className="text-sm font-medium text-brasa hover:text-brasa-escuro"
           >
-            Exportar em CSV
+            Exportar PDF
           </a>
         )}
       </div>

@@ -1,8 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { listarVendas } from "@/lib/dados";
+import { listarProdutos, listarTurmas, listarVendas } from "@/lib/dados";
 import { aplicarFiltros, lerFiltros } from "@/lib/filtros";
-import { gerarCsv, nomeArquivoRelatorio } from "@/lib/csv";
+import { gerarRelatorioPdf, nomeArquivoRelatorio } from "@/lib/pdf";
 
 export const dynamic = "force-dynamic";
 
@@ -25,11 +25,28 @@ export async function GET(request: NextRequest) {
   }
 
   const filtros = lerFiltros(params);
-  const vendas = aplicarFiltros(await listarVendas(), filtros);
 
-  return new NextResponse(gerarCsv(vendas), {
+  const [todasVendas, produtos, turmas] = await Promise.all([
+    listarVendas(),
+    listarProdutos(),
+    listarTurmas(),
+  ]);
+
+  const vendas = aplicarFiltros(todasVendas, filtros);
+
+  // Nomes, e não ids, para o cabeçalho do relatório dizer o recorte por extenso.
+  const nomesDe = (itens: { id: string; nome: string }[], ids: string[]) =>
+    ids.map((id) => itens.find((i) => i.id === id)?.nome ?? "item removido");
+
+  const pdf = await gerarRelatorioPdf(vendas, {
+    periodo: filtros.periodo,
+    produtos: nomesDe(produtos, filtros.produtos),
+    turmas: nomesDe(turmas, filtros.turmas),
+  });
+
+  return new NextResponse(pdf as BodyInit, {
     headers: {
-      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Type": "application/pdf",
       "Content-Disposition": `attachment; filename="${nomeArquivoRelatorio(filtros.periodo)}"`,
       "Cache-Control": "no-store",
     },

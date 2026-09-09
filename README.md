@@ -100,8 +100,9 @@ npm test           # suíte de testes (ver abaixo)
 
 - **lógica** — leitura e escrita dos filtros na URL, agrupamento por mês no
   fuso de São Paulo, entrada de valores em pt-BR, totais e ticket médio;
-- **CSV** — colunas, escape de aspas e ponto e vírgula, BOM UTF-8, linha de
-  total, nome do arquivo;
+- **PDF** — assinatura e tamanho A4 do arquivo, paginação, o bloco de total
+  que nunca fica órfão, truncamento de nomes longos, resistência a emoji e
+  caracteres fora do latim, nome do arquivo;
 - **schema** — o `schema.sql` é executado em um Postgres de verdade (PGlite),
   conferindo os triggers, as restrições e a proteção do histórico.
 
@@ -137,11 +138,20 @@ válida por 10 minutos. Nenhum arquivo fica acessível por URL pública.
 parâmetros (`?periodo=2026-01&produto=…&turma=…`). Por isso o botão de exportar
 é só um link para `/api/relatorio` com os mesmos parâmetros — o relatório sai
 sempre com o recorte que está na tela, sem estado duplicado para dessincronizar.
+O cabeçalho do PDF repete esse recorte por extenso, então o arquivo diz sozinho
+o que está sendo mostrado.
 
-**O relatório é CSV com `;` e BOM UTF-8.** É o formato que o Excel em português
-abre com dois cliques, com os acentos certos e sem passar pelo assistente de
-importação. Cada linha é uma venda (nome, telefone, e-mail, produto, turma,
-valor, status e data), com uma linha de total ao final.
+**O relatório é um PDF paginado, não uma planilha.** Planilha de exportação é
+ruim de ler e pior ainda de mandar para alguém. O PDF sai na paleta do painel:
+faixa navy com a marca, fio vermelho de destaque, cabeçalho dizendo o recorte
+(período, produtos e turmas), uma linha compacta por venda — comprador,
+telefone, produto, turma e valor — e o total do recorte fechando o documento.
+
+Ele é montado com `pdf-lib` usando as fontes padrão do PDF. O WinAnsi já cobre
+todo o português, então nenhum arquivo de fonte precisa ser embutido: a
+exportação não depende de asset em disco no ambiente serverless, e um relatório
+de 42 vendas sai com menos de 10 KB. O que a fonte não representa (emoji, por
+exemplo) é descartado do texto em vez de derrubar a exportação inteira.
 
 ---
 
@@ -155,17 +165,17 @@ src/
       vendas/            # listagem, formulário, detalhes e comprovante
       produtos/
       turmas/
-    api/relatorio/       # exportação CSV respeitando os filtros
+    api/relatorio/       # exportação PDF respeitando os filtros
     login/
   actions/               # Server Actions (escrita)
   components/            # sidebar, cards, modal, ícones, UI base
   lib/
     supabase/            # clientes de servidor, navegador e middleware
     filtros.ts           # períodos e filtros combináveis
-    csv.ts               # geração do relatório
+    pdf.ts               # geração do relatório em PDF
     dados.ts             # leitura
 supabase/schema.sql      # provisionamento completo do banco
-tests/                   # suítes de lógica, CSV e schema
+tests/                   # suítes de lógica, PDF e schema
 ```
 
 ---
