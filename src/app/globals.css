@@ -1,0 +1,84 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--fonte-sans), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-serif: var(--fonte-serif), Georgia, "Times New Roman", serif;
+
+  /* Sidebar */
+  --color-navy: #0f1626;
+  --color-navy-alto: #1a2337;
+  --color-navy-borda: #222d44;
+  --color-navy-texto: #a8b1c4;
+
+  /* Conteúdo */
+  --color-papel: #f7f8fb;
+  --color-tinta: #101828;
+  --color-neutro: #667085;
+  --color-neutro-fraco: #98a2b3;
+  --color-borda: #e6e8ee;
+  --color-borda-forte: #d3d7e0;
+
+  /* Ação / destaque */
+  --color-brasa: #d40c1b;
+  --color-brasa-escuro: #ab0915;
+  --color-brasa-claro: #ff5a6a;
+  --color-brasa-fraco: #fdeced;
+
+  /* Status */
+  --color-ok: #0f7a4d;
+  --color-ok-fraco: #e2f5ec;
+  --color-pendente: #96590a;
+  --color-pendente-fraco: #fdf1dc;
+
+  /* Manchas decorativas dos cards */
+  --color-blob-azul: #dfe8fc;
+  --color-blob-verde: #d7f0e3;
+  --color-blob-roxo: #eadffb;
+  --color-blob-vermelho: #fbdfe2;
+}
+
+html {
+  color-scheme: light;
+}
+
+body {
+  background-color: var(--color-papel);
+  color: var(--color-tinta);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Números e títulos em serifada, como no painel de referência. */
+.serif {
+  font-family: var(--font-serif);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* Rótulo pequeno em caixa alta dentro dos cards de métrica. */
+.rotulo-metrica {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-neutro);
+}
+
+/* Foco visível e consistente em toda a interface. */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-brasa);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Barra de rolagem discreta na sidebar. */
+.rolagem-sidebar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-navy-borda) transparent;
+}
+
+@media print {
+  .sem-impressao {
+    display: none !important;
+  }
+}
