@@ -48,7 +48,7 @@ export function GerenciadorTurmas({
           {ativas.length} turma{ativas.length === 1 ? "" : "s"} ativa
           {ativas.length === 1 ? "" : "s"}
           {arquivadas.length > 0 &&
-            ` · ${arquivadas.length} arquivada${arquivadas.length === 1 ? "" : "s"}`}
+            `, mais ${arquivadas.length} arquivada${arquivadas.length === 1 ? "" : "s"}`}
         </p>
         <Botao onClick={() => setNovaAberta(true)}>
           <IconeMais className="h-4 w-4" />

@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { CartaoMetrica } from "@/components/cartao-metrica";
 import {
   IconeAlerta,
@@ -15,23 +14,19 @@ import {
   Cartao,
   EstadoVazio,
   EtiquetaStatus,
-  PilulaLink,
-  pilulaClasses,
 } from "@/components/ui";
 import { listarProdutos, listarTurmas, listarVendas } from "@/lib/dados";
 import {
-  alternar,
   aplicarFiltros,
-  href,
   lerFiltros,
   mesesDisponiveis,
   montarQuery,
   rotularMes,
-  temFiltroAtivo,
   totalizar,
   type Filtros,
 } from "@/lib/filtros";
 import { formatarData, formatarMoeda } from "@/lib/format";
+import { FiltrosDashboard } from "./filtros-dashboard";
 
 export const metadata = { title: "Início | Controle de Vendas" };
 export const dynamic = "force-dynamic";
@@ -99,7 +94,7 @@ export default async function PaginaInicio({
         </Cartao>
       ) : (
         <>
-          <Filtragem
+          <FiltrosDashboard
             filtros={filtros}
             meses={meses}
             produtos={produtosComVenda}
@@ -144,112 +139,6 @@ export default async function PaginaInicio({
           <TabelaComposicao vendas={filtradas} filtros={filtros} />
         </>
       )}
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-
-function Filtragem({
-  filtros,
-  meses,
-  produtos,
-  turmas,
-}: {
-  filtros: Filtros;
-  meses: string[];
-  produtos: { id: string; nome: string }[];
-  turmas: { id: string; nome: string }[];
-}) {
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <PilulaLink
-          ativa={filtros.periodo === "tudo"}
-          href={href("/", { ...filtros, periodo: "tudo" })}
-        >
-          Tudo
-        </PilulaLink>
-        {meses.map((mes) => (
-          <PilulaLink
-            key={mes}
-            ativa={filtros.periodo === mes}
-            href={href("/", { ...filtros, periodo: mes })}
-          >
-            {rotularMes(mes)}
-          </PilulaLink>
-        ))}
-      </div>
-
-      {produtos.length > 0 && (
-        <GrupoFiltro
-          titulo="Produtos"
-          itens={produtos}
-          selecionados={filtros.produtos}
-          hrefDe={(id) =>
-            href("/", { ...filtros, produtos: alternar(filtros.produtos, id) })
-          }
-          hrefLimpar={href("/", { ...filtros, produtos: [] })}
-        />
-      )}
-
-      {turmas.length > 0 && (
-        <GrupoFiltro
-          titulo="Turmas"
-          itens={turmas}
-          selecionados={filtros.turmas}
-          hrefDe={(id) =>
-            href("/", { ...filtros, turmas: alternar(filtros.turmas, id) })
-          }
-          hrefLimpar={href("/", { ...filtros, turmas: [] })}
-        />
-      )}
-
-      {temFiltroAtivo(filtros) && (
-        <Link
-          href="/"
-          scroll={false}
-          className="inline-block text-sm font-medium text-brasa hover:text-brasa-escuro"
-        >
-          Limpar todos os filtros
-        </Link>
-      )}
-    </div>
-  );
-}
-
-function GrupoFiltro({
-  titulo,
-  itens,
-  selecionados,
-  hrefDe,
-  hrefLimpar,
-}: {
-  titulo: string;
-  itens: { id: string; nome: string }[];
-  selecionados: string[];
-  hrefDe: (id: string) => string;
-  hrefLimpar: string;
-}) {
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      <span className="rotulo-metrica mr-1">{titulo}</span>
-      <Link
-        href={hrefLimpar}
-        scroll={false}
-        className={pilulaClasses(selecionados.length === 0)}
-      >
-        Todos
-      </Link>
-      {itens.map((item) => (
-        <PilulaLink
-          key={item.id}
-          ativa={selecionados.includes(item.id)}
-          href={hrefDe(item.id)}
-        >
-          {item.nome}
-        </PilulaLink>
-      ))}
     </div>
   );
 }

@@ -49,7 +49,8 @@ export function GerenciadorProdutos({
         <p className="text-sm text-neutro">
           {ativos.length} produto{ativos.length === 1 ? "" : "s"} ativo
           {ativos.length === 1 ? "" : "s"}
-          {arquivados.length > 0 && ` · ${arquivados.length} arquivado${arquivados.length === 1 ? "" : "s"}`}
+          {arquivados.length > 0 &&
+            `, mais ${arquivados.length} arquivado${arquivados.length === 1 ? "" : "s"}`}
         </p>
         <Botao onClick={() => setNovoAberto(true)}>
           <IconeMais className="h-4 w-4" />

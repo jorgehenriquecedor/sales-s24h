@@ -135,6 +135,12 @@ export const IconeArquivar = (p: Props) => (
   </Base>
 );
 
+export const IconeFunil = (p: Props) => (
+  <Base {...p}>
+    <path d="M3.5 5h17l-6.6 7.8v5.6l-3.8 2.2v-7.8L3.5 5Z" />
+  </Base>
+);
+
 export const IconeVazio = (p: Props) => (
   <Base {...p}>
     <path d="M3.5 8.5 12 4l8.5 4.5v7L12 20l-8.5-4.5v-7Z" opacity="0.45" />
