@@ -1,0 +1,4 @@
+project_id = "sales-s24h"
+
+[auth]
+enable_signup = false
