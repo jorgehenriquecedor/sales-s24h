@@ -4,6 +4,7 @@ import { useActionState, useRef, useState, startTransition } from "react";
 import {
   atualizarVenda,
   excluirVenda,
+  gerarCheckoutNovamente,
   registrarComprovante,
   removerComprovante,
 } from "@/actions/vendas";
@@ -16,7 +17,7 @@ import {
   IconeRecibo,
 } from "@/components/icones";
 import { Modal } from "@/components/modal";
-import { Aviso, Botao, EtiquetaStatus } from "@/components/ui";
+import { Aviso, Botao, EtiquetaPagamento, EtiquetaStatus } from "@/components/ui";
 import { createClient } from "@/lib/supabase/client";
 import {
   ACCEPT_ARQUIVO,
@@ -64,6 +65,7 @@ export function DetalheVenda({
     },
     VAZIO,
   );
+  const [estadoCheckout, acaoCheckout] = useActionState(gerarCheckoutNovamente, VAZIO);
 
   if (!venda) return null;
 
@@ -135,25 +137,50 @@ export function DetalheVenda({
               valor={formatarDataHora(venda.created_at)}
             />
             <div>
-              <dt className="rotulo-metrica">Status</dt>
+              <dt className="rotulo-metrica">Pagamento</dt>
               <dd className="mt-1.5">
-                <EtiquetaStatus status={venda.status} />
+                <EtiquetaPagamento status={venda.pagamento_status} />
               </dd>
             </div>
           </dl>
 
+          <section className="rounded-xl border border-borda bg-papel p-4 space-y-3">
+            <h3 className="text-sm font-semibold text-tinta">Checkout Asaas</h3>
+            {venda.pagamento_status === "pendente" && venda.asaas_checkout_url && (
+              <>
+                <a href={venda.asaas_checkout_url} target="_blank" rel="noopener noreferrer" className="block break-all text-sm text-brasa underline">
+                  {venda.asaas_checkout_url}
+                </a>
+                <p className="text-xs text-neutro">Compartilhe este link com o comprador. Válido até {venda.asaas_checkout_expira_em ? formatarDataHora(venda.asaas_checkout_expira_em) : "a expiração informada pelo Asaas"}.</p>
+                <Botao variante="secundario" onClick={() => navigator.clipboard.writeText(venda.asaas_checkout_url!)}>Copiar link</Botao>
+              </>
+            )}
+            {venda.pagamento_status === "aprovada" && <p className="text-sm text-neutro">Pagamento confirmado pelo Asaas.</p>}
+            {(venda.pagamento_status === "expirada" ||
+              venda.pagamento_status === "nao_monitorado" ||
+              (venda.pagamento_status === "pendente" && !venda.asaas_checkout_id)) && (
+              <form action={acaoCheckout}>
+                <input type="hidden" name="id" value={venda.id} />
+                <BotaoEnvio carregando="Gerando…">{venda.pagamento_status === "expirada" ? "Gerar checkout novamente" : "Gerar checkout"}</BotaoEnvio>
+              </form>
+            )}
+            {estadoCheckout.erro && <Aviso>{estadoCheckout.erro}</Aviso>}
+          </section>
+
           <BlocoComprovante venda={venda} />
 
           <div className="flex flex-wrap justify-between gap-2 border-t border-borda pt-4">
-            <Botao variante="perigo" onClick={() => setModo("excluir")}>
-              <IconeLixeira className="h-4 w-4" />
-              Excluir venda
-            </Botao>
+            {venda.pagamento_status === "nao_monitorado" ? (
+              <Botao variante="perigo" onClick={() => setModo("excluir")}>
+                <IconeLixeira className="h-4 w-4" />
+                Excluir venda
+              </Botao>
+            ) : <span />}
             <div className="flex gap-2">
               <Botao variante="secundario" onClick={aoFechar}>
                 Fechar
               </Botao>
-              <Botao onClick={() => setModo("editar")}>Editar dados</Botao>
+              {venda.pagamento_status === "nao_monitorado" && <Botao onClick={() => setModo("editar")}>Editar dados</Botao>}
             </div>
           </div>
         </div>
@@ -274,6 +301,12 @@ function BlocoComprovante({ venda }: { venda: Venda }) {
           Comprovante de pagamento
         </h3>
       </div>
+      <div className="mt-2"><EtiquetaStatus status={venda.status} /></div>
+      {venda.asaas_comprovante_url && !anexado && (
+        <a href={venda.asaas_comprovante_url} target="_blank" rel="noopener noreferrer" className="mt-3 block text-sm text-brasa underline">
+          Abrir comprovante no Asaas
+        </a>
+      )}
 
       {anexado ? (
         <div className="mt-3 space-y-3">
@@ -330,8 +363,9 @@ function BlocoComprovante({ venda }: { venda: Venda }) {
       ) : (
         <div className="mt-3 space-y-3">
           <p className="text-sm text-neutro">
-            Anexe a imagem ou o PDF do pagamento. Ao anexar, o status da venda
-            muda para <span className="font-medium text-tinta">comprovante anexado</span>.
+            {venda.pagamento_status === "aprovada"
+              ? "O pagamento foi aprovado. Se o Asaas fornecer apenas uma página de comprovante, use o link acima ou anexe um arquivo manualmente."
+              : "O comprovante será anexado quando o Asaas o disponibilizar. Você também pode anexar uma imagem ou PDF manualmente."}
           </p>
           <SeletorArquivo
             entrada={entrada}

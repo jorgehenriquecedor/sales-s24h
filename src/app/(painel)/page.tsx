@@ -13,6 +13,7 @@ import {
   CabecalhoPagina,
   Cartao,
   EstadoVazio,
+  EtiquetaPagamento,
   EtiquetaStatus,
 } from "@/components/ui";
 import { listarProdutos, listarTurmas, listarVendas } from "@/lib/dados";
@@ -47,7 +48,9 @@ export default async function PaginaInicio({
 
   const meses = mesesDisponiveis(vendas);
   const filtradas = aplicarFiltros(vendas, filtros);
-  const resumo = totalizar(filtradas);
+  const aprovadas = filtradas.filter((v) => v.pagamento_status === "aprovada");
+  const resumo = totalizar(aprovadas);
+  const aguardando = filtradas.filter((v) => v.pagamento_status === "pendente").length;
 
   // Só oferece como filtro o que realmente aparece em alguma venda.
   const produtosComVenda = produtos.filter((p) =>
@@ -64,15 +67,15 @@ export default async function PaginaInicio({
     <div className="space-y-7">
       <CabecalhoPagina
         titulo="Visão geral"
-        descricao="Total de vendas do período selecionado, com os filtros combináveis por produto e turma."
+        descricao="Pagamentos aprovados no período selecionado, com filtros por produto e turma."
         acoes={
-          vendas.length > 0 ? (
+          aprovadas.length > 0 ? (
             <a
               href={`/api/relatorio${montarQuery(filtros)}`}
               className="inline-flex items-center justify-center gap-2 rounded-full border border-borda-forte bg-white px-4 py-2 text-sm font-medium text-tinta shadow-sm transition-colors hover:border-neutro-fraco hover:bg-papel"
             >
               <IconeBaixar className="h-4 w-4" />
-              Exportar PDF
+              Exportar aprovadas
             </a>
           ) : undefined
         }
@@ -105,33 +108,33 @@ export default async function PaginaInicio({
             <CartaoMetrica
               tom="azul"
               icone={<IconeDinheiro />}
-              rotulo="Valor total"
+              rotulo="Valor aprovado"
               valor={formatarMoeda(resumo.total)}
-              apoio={`Soma das vendas em ${rotuloPeriodo}`}
+              apoio={`Pagamentos confirmados em ${rotuloPeriodo}`}
             />
             <CartaoMetrica
               tom="verde"
               icone={<IconeVendas />}
-              rotulo="Vendas"
+              rotulo="Vendas aprovadas"
               valor={String(resumo.quantidade)}
-              apoio="Registros no recorte atual"
+              apoio="Pagamentos confirmados no recorte"
             />
             <CartaoMetrica
               tom="roxo"
               icone={<IconeTicket />}
               rotulo="Ticket médio"
               valor={formatarMoeda(resumo.ticketMedio)}
-              apoio="Valor médio por venda"
+              apoio="Valor médio das vendas aprovadas"
             />
             <CartaoMetrica
               tom="vermelho"
               icone={<IconeAlerta />}
-              rotulo="Comprovantes pendentes"
-              valor={String(resumo.pendentes)}
+              rotulo="Aguardando pagamento"
+              valor={String(aguardando)}
               apoio={
-                resumo.pendentes === 0
+                aguardando === 0
                   ? "Tudo em dia neste recorte"
-                  : "Vendas esperando anexo"
+                  : "Vendas com checkout pendente"
               }
             />
           </div>
@@ -158,16 +161,15 @@ function TabelaComposicao({
         <div>
           <h2 className="serif text-lg text-tinta">Vendas do recorte</h2>
           <p className="mt-0.5 text-sm text-neutro">
-            As {vendas.length} venda{vendas.length === 1 ? "" : "s"} que compõem
-            o total acima.
+            {vendas.length} registro{vendas.length === 1 ? "" : "s"} no recorte. O valor acima considera somente as vendas aprovadas.
           </p>
         </div>
-        {vendas.length > 0 && (
+        {vendas.some((v) => v.pagamento_status === "aprovada") && (
           <a
             href={`/api/relatorio${montarQuery(filtros)}`}
             className="text-sm font-medium text-brasa hover:text-brasa-escuro"
           >
-            Exportar PDF
+            Exportar aprovadas
           </a>
         )}
       </div>
@@ -195,6 +197,7 @@ function TabelaComposicao({
                   Valor
                 </th>
                 <th className="px-5 py-3 font-medium text-neutro">Data</th>
+                <th className="px-5 py-3 font-medium text-neutro">Pagamento</th>
                 <th className="px-5 py-3 font-medium text-neutro">Comprovante</th>
               </tr>
             </thead>
@@ -211,6 +214,9 @@ function TabelaComposicao({
                   </td>
                   <td className="px-5 py-3.5 whitespace-nowrap tabular-nums text-neutro">
                     {formatarData(venda.created_at)}
+                  </td>
+                  <td className="px-5 py-3.5">
+                    <EtiquetaPagamento status={venda.pagamento_status} />
                   </td>
                   <td className="px-5 py-3.5">
                     <EtiquetaStatus status={venda.status} />

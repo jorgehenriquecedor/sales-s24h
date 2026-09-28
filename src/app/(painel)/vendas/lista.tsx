@@ -1,8 +1,8 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
-import { criarVenda } from "@/actions/vendas";
-import type { Resultado } from "@/actions/produtos";
+import { useActionState, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { criarVenda, type ResultadoVenda } from "@/actions/vendas";
 import { IconeMais, IconeVazio } from "@/components/icones";
 import { Modal } from "@/components/modal";
 import {
@@ -11,7 +11,9 @@ import {
   Cartao,
   Campo,
   EstadoVazio,
+  EtiquetaPagamento,
   EtiquetaStatus,
+  Aviso,
   pilulaClasses,
 } from "@/components/ui";
 import { formatarData, formatarMoeda } from "@/lib/format";
@@ -19,29 +21,42 @@ import type { Produto, Turma, Venda } from "@/lib/types";
 import { FormularioVenda } from "./formulario-venda";
 import { DetalheVenda } from "./detalhe";
 
-const VAZIO: Resultado = {};
+const VAZIO_VENDA: ResultadoVenda = {};
 
-type FiltroStatus = "todas" | "pendentes" | "anexadas";
+type FiltroStatus = "todas" | "pendentes" | "expiradas" | "aprovadas";
 
 const FILTROS: { chave: FiltroStatus; rotulo: string }[] = [
   { chave: "todas", rotulo: "Todas" },
-  { chave: "pendentes", rotulo: "Comprovante pendente" },
-  { chave: "anexadas", rotulo: "Comprovante anexado" },
+  { chave: "pendentes", rotulo: "Aguardando pagamento" },
+  { chave: "expiradas", rotulo: "Expiradas" },
+  { chave: "aprovadas", rotulo: "Aprovadas" },
 ];
 
 export function ListaVendas({
   vendas,
   produtos,
   turmas,
+  asaasAtivo,
 }: {
   vendas: Venda[];
   produtos: Produto[];
   turmas: Turma[];
+  asaasAtivo: boolean;
 }) {
   const [novaAberta, setNovaAberta] = useState(false);
   const [abertaId, setAbertaId] = useState<string | null>(null);
   const [filtro, setFiltro] = useState<FiltroStatus>("todas");
   const [busca, setBusca] = useState("");
+  const [aviso, setAviso] = useState<string | null>(null);
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!vendas.some((v) => v.pagamento_status === "pendente" ||
+      v.pagamento_status === "expirada" ||
+      (v.pagamento_status === "aprovada" && !v.comprovante_path && !v.asaas_comprovante_url))) return;
+    const timer = window.setInterval(() => router.refresh(), 30_000);
+    return () => window.clearInterval(timer);
+  }, [router, vendas]);
 
   // A venda aberta vem sempre da lista fresca do servidor, para o modal
   // refletir na hora o que uma ação acabou de mudar.
@@ -53,10 +68,13 @@ export function ListaVendas({
     const termo = busca.trim().toLowerCase();
 
     return vendas.filter((venda) => {
-      if (filtro === "pendentes" && venda.status !== "comprovante_nao_anexado") {
+      if (filtro === "pendentes" && venda.pagamento_status !== "pendente") {
         return false;
       }
-      if (filtro === "anexadas" && venda.status !== "comprovante_anexado") {
+      if (filtro === "expiradas" && venda.pagamento_status !== "expirada") {
+        return false;
+      }
+      if (filtro === "aprovadas" && venda.pagamento_status !== "aprovada") {
         return false;
       }
       if (!termo) return true;
@@ -75,13 +93,15 @@ export function ListaVendas({
   }, [vendas, filtro, busca]);
 
   const pendentes = vendas.filter(
-    (v) => v.status === "comprovante_nao_anexado",
+    (v) => v.pagamento_status === "pendente",
   ).length;
 
-  const semCadastros = produtos.length === 0 || turmas.length === 0;
+  const semCadastros = produtos.length === 0;
 
   return (
     <div className="space-y-5">
+      {!asaasAtivo && <Aviso tom="info">A integração Asaas aguarda a chave de API e o token do webhook. Novas vendas com checkout estarão disponíveis após a configuração.</Aviso>}
+      {aviso && <Aviso tom="info">{aviso}</Aviso>}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           {FILTROS.map((item) => (
@@ -118,11 +138,9 @@ export function ListaVendas({
           />
           <Botao
             onClick={() => setNovaAberta(true)}
-            disabled={semCadastros}
+            disabled={semCadastros || !asaasAtivo}
             title={
-              semCadastros
-                ? "Cadastre ao menos um produto e uma turma antes"
-                : undefined
+              semCadastros ? "Cadastre ao menos um produto antes" : !asaasAtivo ? "Configure a integração Asaas" : undefined
             }
           >
             <IconeMais className="h-4 w-4" />
@@ -138,8 +156,8 @@ export function ListaVendas({
             titulo="Nenhuma venda registrada"
             descricao={
               semCadastros
-                ? "Antes de registrar a primeira venda, cadastre pelo menos um produto e uma turma."
-                : "Registre a primeira venda fechada pelo link de pagamento para começar a acompanhar os comprovantes."
+                ? "Antes de registrar a primeira venda, cadastre pelo menos um produto."
+                : "Registre a primeira venda para gerar um checkout Asaas e acompanhar o pagamento."
             }
             acao={
               semCadastros ? (
@@ -147,17 +165,9 @@ export function ListaVendas({
                   {produtos.length === 0 && (
                     <BotaoLink href="/produtos">Cadastrar produto</BotaoLink>
                   )}
-                  {turmas.length === 0 && (
-                    <BotaoLink
-                      href="/turmas"
-                      variante={produtos.length === 0 ? "secundario" : "primario"}
-                    >
-                      Cadastrar turma
-                    </BotaoLink>
-                  )}
                 </div>
               ) : (
-                <Botao onClick={() => setNovaAberta(true)}>
+                <Botao onClick={() => setNovaAberta(true)} disabled={!asaasAtivo}>
                   <IconeMais className="h-4 w-4" />
                   Registrar venda
                 </Botao>
@@ -193,6 +203,7 @@ export function ListaVendas({
                     Valor
                   </th>
                   <th className="px-5 py-3 font-medium text-neutro">Data</th>
+                  <th className="px-5 py-3 font-medium text-neutro">Pagamento</th>
                   <th className="px-5 py-3 font-medium text-neutro">Comprovante</th>
                 </tr>
               </thead>
@@ -230,6 +241,9 @@ export function ListaVendas({
                       {formatarData(venda.created_at)}
                     </td>
                     <td className="px-5 py-3.5">
+                      <EtiquetaPagamento status={venda.pagamento_status} />
+                    </td>
+                    <td className="px-5 py-3.5">
                       <EtiquetaStatus status={venda.status} />
                     </td>
                   </tr>
@@ -242,14 +256,14 @@ export function ListaVendas({
 
       {visiveis.length > 0 && (
         <p className="text-xs text-neutro">
-          Clique em uma linha para ver todos os dados, anexar o comprovante ou
-          editar a venda.
+          Clique em uma linha para abrir o checkout, ver o comprovante ou gerar outro link após a expiração.
         </p>
       )}
 
       <ModalNovaVenda
         aberto={novaAberta}
         aoFechar={() => setNovaAberta(false)}
+        aoCriar={(id, mensagem) => { setNovaAberta(false); setAbertaId(id); setAviso(mensagem ?? null); router.refresh(); }}
         produtos={produtos}
         turmas={turmas}
       />
@@ -268,21 +282,23 @@ export function ListaVendas({
 function ModalNovaVenda({
   aberto,
   aoFechar,
+  aoCriar,
   produtos,
   turmas,
 }: {
   aberto: boolean;
   aoFechar: () => void;
+  aoCriar: (id: string, aviso?: string) => void;
   produtos: Produto[];
   turmas: Turma[];
 }) {
   const [estado, acao] = useActionState(
-    async (anterior: Resultado, dados: FormData) => {
+    async (anterior: ResultadoVenda, dados: FormData) => {
       const resultado = await criarVenda(anterior, dados);
-      if (resultado.ok) aoFechar();
+      if (resultado.ok && resultado.vendaId) aoCriar(resultado.vendaId, resultado.aviso);
       return resultado;
     },
-    VAZIO,
+    VAZIO_VENDA,
   );
 
   return (
@@ -290,7 +306,7 @@ function ModalNovaVenda({
       aberto={aberto}
       aoFechar={aoFechar}
       titulo="Nova venda"
-      descricao="A venda entra como comprovante pendente. O anexo é feito na tela de detalhes."
+      descricao="Ao registrar, geramos um checkout Asaas válido por 24 horas para esta venda."
       largura="max-w-2xl"
     >
       {aberto && (
@@ -301,7 +317,7 @@ function ModalNovaVenda({
           produtos={produtos}
           turmas={turmas}
           aoCancelar={aoFechar}
-          rotuloEnvio="Registrar venda"
+          rotuloEnvio="Registrar e gerar checkout"
         />
       )}
     </Modal>

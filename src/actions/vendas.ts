@@ -4,9 +4,13 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { converterParaNumero } from "@/lib/format";
 import { BUCKET_COMPROVANTES } from "@/lib/comprovante";
+import { asaasConfigurado } from "@/lib/asaas";
+import { gerarCheckout } from "@/lib/asaas-fluxo";
 import type { Resultado } from "./produtos";
 
 const BUCKET = BUCKET_COMPROVANTES;
+
+export type ResultadoVenda = Resultado & { vendaId?: string; aviso?: string };
 
 function revalidarTudo() {
   revalidatePath("/", "layout");
@@ -17,7 +21,7 @@ type CamposVenda = {
   comprador_telefone: string;
   comprador_email: string;
   produto_id: string;
-  turma_id: string;
+  turma_id: string | null;
   valor: number;
 };
 
@@ -27,7 +31,7 @@ function lerCampos(formData: FormData): CamposVenda {
     comprador_telefone: String(formData.get("comprador_telefone") ?? "").trim(),
     comprador_email: String(formData.get("comprador_email") ?? "").trim(),
     produto_id: String(formData.get("produto_id") ?? ""),
-    turma_id: String(formData.get("turma_id") ?? ""),
+    turma_id: String(formData.get("turma_id") ?? "") || null,
     valor: converterParaNumero(formData.get("valor")),
   };
 }
@@ -35,31 +39,40 @@ function lerCampos(formData: FormData): CamposVenda {
 function validar(campos: CamposVenda): string | null {
   if (!campos.comprador_nome) return "Informe o nome completo do comprador.";
   if (!campos.produto_id) return "Selecione o produto.";
-  if (!campos.turma_id) return "Selecione a turma.";
   if (!Number.isFinite(campos.valor)) return "Informe um valor válido.";
-  if (campos.valor < 0) return "O valor não pode ser negativo.";
+  if (campos.valor <= 0) return "O valor deve ser maior que zero para gerar o checkout.";
   return null;
 }
 
 /** Busca os nomes atuais para congelar na venda. */
-async function nomesDeReferencia(produtoId: string, turmaId: string) {
+async function nomesDeReferencia(produtoId: string, turmaId: string | null) {
   const supabase = await createClient();
 
-  const [produto, turma] = await Promise.all([
-    supabase.from("produtos").select("nome").eq("id", produtoId).maybeSingle(),
-    supabase.from("turmas").select("nome").eq("id", turmaId).maybeSingle(),
-  ]);
+  const produto = await supabase
+    .from("produtos")
+    .select("nome")
+    .eq("id", produtoId)
+    .maybeSingle();
 
   if (!produto.data) return { erro: "Produto não encontrado." as const };
+  if (!turmaId) return { produto_nome: produto.data.nome, turma_nome: "" };
+
+  const turma = await supabase
+    .from("turmas")
+    .select("nome")
+    .eq("id", turmaId)
+    .maybeSingle();
+
   if (!turma.data) return { erro: "Turma não encontrada." as const };
 
   return { produto_nome: produto.data.nome, turma_nome: turma.data.nome };
 }
 
 export async function criarVenda(
-  _anterior: Resultado,
+  _anterior: ResultadoVenda,
   formData: FormData,
-): Promise<Resultado> {
+): Promise<ResultadoVenda> {
+  if (!asaasConfigurado()) return { erro: "A integração Asaas ainda não foi configurada. Configure as credenciais antes de criar uma venda." };
   const campos = lerCampos(formData);
   const invalido = validar(campos);
   if (invalido) return { erro: invalido };
@@ -68,15 +81,49 @@ export async function criarVenda(
   if ("erro" in nomes) return { erro: nomes.erro };
 
   const supabase = await createClient();
-  const { error } = await supabase.from("vendas").insert({
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { erro: "Faça login novamente para criar a venda." };
+  const { data: venda, error } = await supabase.from("vendas").insert({
     ...campos,
     produto_nome: nomes.produto_nome,
     turma_nome: nomes.turma_nome,
     // O status inicial é garantido pelo trigger no banco.
-  });
+  }).select("id").single();
 
-  if (error) return { erro: `Não foi possível registrar a venda: ${error.message}` };
+  if (error || !venda) return { erro: `Não foi possível registrar a venda: ${error?.message ?? "erro desconhecido"}` };
 
+  try {
+    await gerarCheckout(venda.id);
+  } catch (falha) {
+    revalidarTudo();
+    return {
+      ok: true,
+      vendaId: venda.id,
+      aviso: `Venda salva, mas o checkout não foi criado: ${falha instanceof Error ? falha.message : "erro inesperado"}. Abra a venda e tente novamente.`,
+    };
+  }
+
+  revalidarTudo();
+  return { ok: true, vendaId: venda.id };
+}
+
+export async function gerarCheckoutNovamente(
+  _anterior: Resultado,
+  formData: FormData,
+): Promise<Resultado> {
+  const id = String(formData.get("id") ?? "");
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return { erro: "Venda inválida." };
+  if (!asaasConfigurado()) return { erro: "A integração Asaas ainda não foi configurada." };
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { erro: "Faça login novamente." };
+  const { data: venda } = await supabase.from("vendas").select("id").eq("id", id).maybeSingle();
+  if (!venda) return { erro: "Venda não encontrada." };
+  try {
+    await gerarCheckout(id);
+  } catch (falha) {
+    return { erro: falha instanceof Error ? falha.message : "Não foi possível gerar o checkout." };
+  }
   revalidarTudo();
   return { ok: true };
 }

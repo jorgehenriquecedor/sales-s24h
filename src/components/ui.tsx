@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { ComponentProps, ReactNode } from "react";
-import type { StatusVenda } from "@/lib/types";
+import type { StatusPagamento, StatusVenda } from "@/lib/types";
 
 /* ------------------------------------------------------------------ */
 /* Botões                                                              */
@@ -152,6 +152,22 @@ export function EtiquetaStatus({ status }: { status: StatusVenda }) {
       {anexado ? "Comprovante anexado" : "Comprovante pendente"}
     </span>
   );
+}
+
+export function EtiquetaPagamento({ status }: { status: StatusPagamento }) {
+  const rotulos: Record<StatusPagamento, string> = {
+    nao_monitorado: "Sem checkout",
+    pendente: "Aguardando pagamento",
+    expirada: "Checkout expirado",
+    aprovada: "Venda aprovada",
+  };
+  const cores: Record<StatusPagamento, string> = {
+    nao_monitorado: "bg-papel text-neutro",
+    pendente: "bg-pendente-fraco text-pendente",
+    expirada: "bg-brasa-fraco text-brasa-escuro",
+    aprovada: "bg-ok-fraco text-ok",
+  };
+  return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${cores[status]}`}>{rotulos[status]}</span>;
 }
 
 /* ------------------------------------------------------------------ */

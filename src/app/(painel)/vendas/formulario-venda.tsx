@@ -123,16 +123,15 @@ export function FormularioVenda({
         </div>
 
         <div>
-          <Rotulo htmlFor={`turma-${prefixo}`}>Turma</Rotulo>
+          <Rotulo htmlFor={`turma-${prefixo}`} dica="opcional">
+            Turma
+          </Rotulo>
           <Selecao
             id={`turma-${prefixo}`}
             name="turma_id"
-            required
             defaultValue={venda?.turma_id ?? ""}
           >
-            <option value="" disabled>
-              Selecione a turma
-            </option>
+            <option value="">Sem turma</option>
             {turmasVisiveis.map((turma) => (
               <option key={turma.id} value={turma.id}>
                 {turma.nome}

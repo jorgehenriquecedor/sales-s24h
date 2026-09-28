@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { supabaseConfigurado, supabaseEnv } from "./env";
 
 /** Rotas acessíveis sem sessão. */
-const ROTAS_PUBLICAS = ["/login", "/auth"];
+const ROTAS_PUBLICAS = ["/login", "/auth", "/pagamento", "/api/asaas/webhook"];
 
 function ehRotaPublica(pathname: string) {
   return ROTAS_PUBLICAS.some(

@@ -32,7 +32,8 @@ export async function GET(request: NextRequest) {
     listarTurmas(),
   ]);
 
-  const vendas = aplicarFiltros(todasVendas, filtros);
+  const vendas = aplicarFiltros(todasVendas, filtros)
+    .filter((venda) => venda.pagamento_status === "aprovada");
 
   // Nomes, e não ids, para o cabeçalho do relatório dizer o recorte por extenso.
   const nomesDe = (itens: { id: string; nome: string }[], ids: string[]) =>
