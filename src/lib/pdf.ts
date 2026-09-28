@@ -49,10 +49,11 @@ const COLUNAS: {
   alinhamento: Alinhamento;
   valor: (v: Venda) => string;
 }[] = [
-  { rotulo: "Comprador", largura: 148, alinhamento: "esquerda", valor: (v) => v.comprador_nome },
-  { rotulo: "Telefone", largura: 86, alinhamento: "esquerda", valor: (v) => v.comprador_telefone || "—" },
-  { rotulo: "Produto", largura: 104, alinhamento: "esquerda", valor: (v) => v.produto_nome },
-  { rotulo: "Turma", largura: 97, alinhamento: "esquerda", valor: (v) => v.turma_nome },
+  { rotulo: "Comprador", largura: 132, alinhamento: "esquerda", valor: (v) => v.comprador_nome },
+  { rotulo: "Telefone", largura: 87, alinhamento: "esquerda", valor: (v) => v.comprador_telefone || "—" },
+  { rotulo: "Produto", largura: 132, alinhamento: "esquerda", valor: (v) => v.itens?.length
+    ? v.itens.map((item) => item.produto_nome).join(" + ") : v.produto_nome },
+  { rotulo: "Turma", largura: 84, alinhamento: "esquerda", valor: (v) => v.turma_nome },
   { rotulo: "Valor", largura: 80, alinhamento: "direita", valor: (v) => moeda(v.valor) },
 ];
 
@@ -109,6 +110,35 @@ function caber(texto: string, fonte: PDFFont, tamanho: number, largura: number):
     corte = corte.slice(0, -1);
   }
   return `${corte}…`;
+}
+
+/** Quebra o texto pela largura real da fonte, sem descartar nenhum produto. */
+export function quebrarTexto(
+  bruto: string, fonte: PDFFont, tamanho: number, largura: number,
+): string[] {
+  const texto = limparTexto(bruto);
+  if (!texto) return [""];
+  const linhas: string[] = [];
+  let atual = "";
+  for (const palavra of texto.split(" ")) {
+    const candidata = atual ? `${atual} ${palavra}` : palavra;
+    if (fonte.widthOfTextAtSize(candidata, tamanho) <= largura) {
+      atual = candidata;
+      continue;
+    }
+    if (atual) linhas.push(atual);
+    atual = "";
+    for (const letra of Array.from(palavra)) {
+      if (atual && fonte.widthOfTextAtSize(atual + letra, tamanho) > largura) {
+        linhas.push(atual);
+        atual = letra;
+      } else {
+        atual += letra;
+      }
+    }
+  }
+  if (atual) linhas.push(atual);
+  return linhas;
 }
 
 type OpcoesTexto = {
@@ -359,21 +389,39 @@ function linhaVenda(
   venda: Venda,
   y: number,
   par: boolean,
+  linhasProduto: string[],
+  continuacao: boolean,
 ) {
+  const altura = Math.max(ALTURA_LINHA, 8 + linhasProduto.length * 11);
   if (par) {
     pagina.drawRectangle({
       x: MARGEM,
-      y: y - ALTURA_LINHA,
+      y: y - altura,
       width: CONTEUDO,
-      height: ALTURA_LINHA,
+      height: altura,
       color: PAPEL,
     });
   }
 
   let x = MARGEM;
   for (const [i, coluna] of COLUNAS.entries()) {
+    if (i === 2) {
+      linhasProduto.forEach((linha, indice) => escrever(pagina, linha, {
+        x: x + 8,
+        y: y - 13 - indice * 11,
+        fonte: fontes.corpo,
+        tamanho: 8.5,
+        cor: TINTA,
+      }));
+      x += coluna.largura;
+      continue;
+    }
+    if (continuacao && i !== 0) {
+      x += coluna.largura;
+      continue;
+    }
     const destaque = i === 0 || coluna.alinhamento === "direita";
-    escrever(pagina, coluna.valor(venda), {
+    escrever(pagina, continuacao ? `${venda.comprador_nome} (cont.)` : coluna.valor(venda), {
       x: x + 8,
       y: y - 13,
       fonte: destaque ? fontes.corpoForte : fontes.corpo,
@@ -384,6 +432,7 @@ function linhaVenda(
     });
     x += coluna.largura;
   }
+  return altura;
 }
 
 function blocoTotal(
@@ -514,13 +563,21 @@ export async function gerarRelatorioPdf(
   );
 
   ordenadas.forEach((venda, i) => {
-    if (y - ALTURA_LINHA < PISO) {
-      y = novaPagina(false);
-      pagina = paginas[paginas.length - 1];
-      y = cabecalhoTabela(pagina, fontes, y);
+    const linhas = quebrarTexto(
+      COLUNAS[2].valor(venda), fontes.corpo, 8.5, COLUNAS[2].largura - 16,
+    );
+    let lidas = 0;
+    while (lidas < linhas.length) {
+      if (y - ALTURA_LINHA < PISO) {
+        y = novaPagina(false);
+        pagina = paginas[paginas.length - 1];
+        y = cabecalhoTabela(pagina, fontes, y);
+      }
+      const capacidade = Math.max(1, Math.floor((y - PISO - 8) / 11));
+      const trecho = linhas.slice(lidas, lidas + capacidade);
+      y -= linhaVenda(pagina, fontes, venda, y, i % 2 === 1, trecho, lidas > 0);
+      lidas += trecho.length;
     }
-    linhaVenda(pagina, fontes, venda, y, i % 2 === 1);
-    y -= ALTURA_LINHA;
   });
 
   if (ordenadas.length === 0) {

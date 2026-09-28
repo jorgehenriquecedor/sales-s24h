@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { PDFDocument } from "pdf-lib";
-import { gerarRelatorioPdf, nomeArquivoRelatorio, limparTexto } from "../src/lib/pdf.ts";
+import { PDFDocument, StandardFonts } from "pdf-lib";
+import { gerarRelatorioPdf, nomeArquivoRelatorio, limparTexto, quebrarTexto } from "../src/lib/pdf.ts";
 import type { Venda } from "../src/lib/types.ts";
 
 let ok = 0;
@@ -84,12 +84,27 @@ await ta("recorte com filtros nomeados não quebra", async () => {
   });
   assert.equal(await paginas(bytes), 1);
 });
-await ta("nome gigante é truncado sem estourar a coluna", async () => {
+await ta("nome gigante do comprador é truncado sem estourar a coluna", async () => {
   const bytes = await gerarRelatorioPdf(
-    [v({ nome: "Maria ".repeat(40), produto: "Curso ".repeat(40) })],
+    [v({ nome: "Maria ".repeat(40) })],
     recorte,
   );
   assert.equal(await paginas(bytes), 1);
+});
+await ta("nomes dos produtos cabem em várias linhas sem reticências", async () => {
+  const doc = await PDFDocument.create();
+  const fonte = await doc.embedFont(StandardFonts.Helvetica);
+  const produto = "Curso Presencial + S24H (Suporte 24H)";
+  const linhas = quebrarTexto(produto, fonte, 8.5, 116);
+  assert.ok(linhas.length > 1);
+  assert.equal(linhas.join(" "), produto);
+  assert.ok(linhas.every((linha) => fonte.widthOfTextAtSize(linha, 8.5) <= 116));
+  assert.equal(await paginas(await gerarRelatorioPdf([v({ produto })], recorte)), 1);
+});
+await ta("produto longo pode continuar em outra página sem cortar o relatório", async () => {
+  const produto = "Curso Presencial + S24H (Suporte 24H) ".repeat(100);
+  const bytes = await gerarRelatorioPdf([v({ produto })], recorte);
+  assert.ok(await paginas(bytes) >= 2);
 });
 await ta("emoji e caracteres fora do latim não derrubam a exportação", async () => {
   const bytes = await gerarRelatorioPdf(

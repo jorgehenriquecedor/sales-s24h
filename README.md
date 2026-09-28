@@ -104,7 +104,7 @@ npm test           # suíte de testes (ver abaixo)
 - **lógica** — leitura e escrita dos filtros na URL, agrupamento por mês no
   fuso de São Paulo, entrada de valores em pt-BR, totais e ticket médio;
 - **PDF** — assinatura e tamanho A4 do arquivo, paginação, o bloco de total
-  que nunca fica órfão, truncamento de nomes longos, resistência a emoji e
+  que nunca fica órfão, produtos completos em várias linhas, resistência a emoji e
   caracteres fora do latim, nome do arquivo;
 - **schema** — o `schema.sql` é executado em um Postgres de verdade (PGlite),
   conferindo os triggers, as restrições e a proteção do histórico.
@@ -162,8 +162,9 @@ o que está sendo mostrado.
 **O relatório é um PDF paginado, não uma planilha.** Planilha de exportação é
 ruim de ler e pior ainda de mandar para alguém. O PDF sai na paleta do painel:
 faixa navy com a marca, fio vermelho de destaque, cabeçalho dizendo o recorte
-(período, produtos e turmas), uma linha compacta por venda — comprador,
-telefone, produto, turma e valor — e o total do recorte fechando o documento.
+(período, produtos e turmas), uma linha por venda que cresce para mostrar todos
+os produtos — comprador, telefone, produto, turma e valor — e o total do
+recorte fechando o documento.
 
 Ele é montado com `pdf-lib` usando as fontes padrão do PDF. O WinAnsi já cobre
 todo o português, então nenhum arquivo de fonte precisa ser embutido: a
