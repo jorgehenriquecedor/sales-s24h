@@ -1,4 +1,5 @@
 import { CartaoMetrica } from "@/components/cartao-metrica";
+import { FiltrosPainel } from "@/components/filtros-painel";
 import {
   IconeAlerta,
   IconeBaixar,
@@ -27,7 +28,6 @@ import {
   type Filtros,
 } from "@/lib/filtros";
 import { formatarData, formatarMoeda } from "@/lib/format";
-import { FiltrosDashboard } from "./filtros-dashboard";
 
 export const metadata = { title: "Início | Controle de Vendas" };
 export const dynamic = "force-dynamic";
@@ -97,7 +97,7 @@ export default async function PaginaInicio({
         </Cartao>
       ) : (
         <>
-          <FiltrosDashboard
+          <FiltrosPainel
             filtros={filtros}
             meses={meses}
             produtos={produtosComVenda}

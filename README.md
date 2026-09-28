@@ -202,13 +202,5 @@ tests/                   # suítes de lógica, PDF, banco e rateio
 
 ## Sobre a logo
 
-O arquivo original da logo não chegou junto com o briefing, então o símbolo em
-`src/components/logo.tsx` é uma reconstrução vetorial a partir do painel de
-referência. Para usar o arquivo oficial, coloque-o em `public/logo.svg` e troque
-o `<svg>` do componente por:
-
-```tsx
-<img src="/logo.svg" alt="Prova Oral" className="h-8 w-8" />
-```
-
-Nada mais precisa mudar.
+A marca oficial está em `public/logo.png`. O componente `src/components/logo.tsx`
+a usa no painel e na página de acesso; o relatório em PDF usa o mesmo arquivo.

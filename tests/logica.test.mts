@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { converterParaNumero, paraCampoValor, formatarMoeda } from "../src/lib/format.ts";
-import { chaveMes, rotularMes, mesesDisponiveis, lerFiltros, montarQuery, alternar, aplicarFiltros, totalizar } from "../src/lib/filtros.ts";
+import { chaveMes, rotularMes, mesesDisponiveis, lerFiltros, lerStatusFiltro, montarQuery, montarQueryVendas, alternar, aplicarFiltros, totalizar } from "../src/lib/filtros.ts";
 import type { Venda } from "../src/lib/types.ts";
 
 let ok = 0;
@@ -48,6 +48,16 @@ t("query preserva tudo", () =>
   ));
 t("tudo sem filtro dá query vazia", () =>
   assert.equal(montarQuery({ periodo: "tudo", produtos: [], turmas: [] }), ""));
+t("status inválido volta para todas", () =>
+  assert.equal(lerStatusFiltro({ status: "outro" }), "todas"));
+t("query de vendas combina status com os outros filtros", () => {
+  const query = montarQueryVendas({ periodo: "2026-09", produtos: ["p1", "p2"], turmas: ["t1"] }, "pendentes");
+  assert.equal(query, "?periodo=2026-09&produto=p1&produto=p2&turma=t1&status=pendentes");
+  const params = Object.fromEntries(new URLSearchParams(query.slice(1)));
+  assert.equal(lerStatusFiltro(params), "pendentes");
+});
+t("vendas sem filtros não geram query", () =>
+  assert.equal(montarQueryVendas({ periodo: "tudo", produtos: [], turmas: [] }, "todas"), ""));
 t("ida e volta da query", () => {
   const f = { periodo: "2026-02", produtos: ["p1"], turmas: ["t1", "t2"] };
   const sp = Object.fromEntries(

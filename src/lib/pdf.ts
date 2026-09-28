@@ -1,8 +1,11 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import {
   PDFDocument,
   StandardFonts,
   rgb,
   type PDFFont,
+  type PDFImage,
   type PDFPage,
   type RGB,
 } from "pdf-lib";
@@ -188,14 +191,11 @@ export type RecorteRelatorio = {
   turmas: string[];
 };
 
-/** Marca do painel desenhada em vetor, na proporção do viewBox 32x32. */
-const CAMINHO_LOGO =
-  "M5 4h16.5a1.5 1.5 0 0 1 1.5 1.5V22a1.5 1.5 0 0 1-1.5 1.5H12l-7 5.5V4Z";
-
 function faixaCapa(
   pagina: PDFPage,
   fontes: Fontes,
   geradoEm: Date,
+  logo: PDFImage,
 ): number {
   const topo = PAGINA.altura;
 
@@ -216,12 +216,11 @@ function faixaCapa(
     color: BRASA,
   });
 
-  pagina.drawSvgPath(CAMINHO_LOGO, {
-    x: MARGEM,
-    y: topo - 28,
-    scale: 0.82,
-    color: BRANCO,
-    borderWidth: 0,
+  pagina.drawImage(logo, {
+    x: MARGEM - 6,
+    y: topo - 60,
+    width: 36,
+    height: 47,
   });
 
   escrever(pagina, "Prova Oral", {
@@ -522,9 +521,7 @@ function rodapes(paginas: PDFPage[], fontes: Fontes) {
 
 /**
  * Relatório em PDF paginado: uma linha compacta por venda e o total do
- * recorte fechando o documento. Usa as fontes padrão do PDF, sem arquivo
- * embutido — o WinAnsi já cobre o português, e assim a exportação não
- * depende de nenhum asset em disco no ambiente serverless.
+ * recorte fechando o documento. Usa a logo oficial no cabeçalho da capa.
  */
 export async function gerarRelatorioPdf(
   vendas: Venda[],
@@ -532,6 +529,7 @@ export async function gerarRelatorioPdf(
   geradoEm: Date = new Date(),
 ): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
+  const logo = await doc.embedPng(await readFile(join(process.cwd(), "public", "logo.png")));
 
   const fontes: Fontes = {
     corpo: await doc.embedFont(StandardFonts.Helvetica),
@@ -549,7 +547,7 @@ export async function gerarRelatorioPdf(
     const pagina = doc.addPage([PAGINA.largura, PAGINA.altura]);
     paginas.push(pagina);
     return capa
-      ? blocoRecorte(pagina, fontes, recorte, faixaCapa(pagina, fontes, geradoEm))
+      ? blocoRecorte(pagina, fontes, recorte, faixaCapa(pagina, fontes, geradoEm, logo))
       : faixaContinuacao(pagina, fontes) - 18;
   }
 

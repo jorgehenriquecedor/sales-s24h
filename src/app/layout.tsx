@@ -20,6 +20,7 @@ export const metadata: Metadata = {
   description:
     "Painel interno de controle de vendas, turmas e comprovantes de pagamento.",
   robots: { index: false, follow: false },
+  icons: { icon: "/logo.png" },
 };
 
 export const viewport: Viewport = {

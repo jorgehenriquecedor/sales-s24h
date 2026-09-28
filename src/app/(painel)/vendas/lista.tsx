@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { criarVenda, type ResultadoVenda } from "@/actions/vendas";
 import { IconeMais, IconeVazio } from "@/components/icones";
 import { Modal } from "@/components/modal";
+import { FiltrosPainel } from "@/components/filtros-painel";
 import {
   Botao,
   BotaoLink,
@@ -14,8 +15,8 @@ import {
   EtiquetaPagamento,
   EtiquetaStatus,
   Aviso,
-  pilulaClasses,
 } from "@/components/ui";
+import { aplicarFiltros, mesesDisponiveis, type Filtros, type StatusFiltro } from "@/lib/filtros";
 import { formatarData, formatarMoeda } from "@/lib/format";
 import type { Produto, Turma, Venda } from "@/lib/types";
 import { FormularioVenda } from "./formulario-venda";
@@ -23,30 +24,25 @@ import { DetalheVenda } from "./detalhe";
 
 const VAZIO_VENDA: ResultadoVenda = {};
 
-type FiltroStatus = "todas" | "pendentes" | "expiradas" | "aprovadas";
 type ModoNova = "escolher" | "checkout" | "manual" | null;
-
-const FILTROS: { chave: FiltroStatus; rotulo: string }[] = [
-  { chave: "todas", rotulo: "Todas" },
-  { chave: "pendentes", rotulo: "Pendentes" },
-  { chave: "expiradas", rotulo: "Expiradas" },
-  { chave: "aprovadas", rotulo: "Aprovadas" },
-];
 
 export function ListaVendas({
   vendas,
   produtos,
   turmas,
+  filtros,
+  status,
   asaasAtivo,
 }: {
   vendas: Venda[];
   produtos: Produto[];
   turmas: Turma[];
+  filtros: Filtros;
+  status: StatusFiltro;
   asaasAtivo: boolean;
 }) {
   const [modoNova, setModoNova] = useState<ModoNova>(null);
   const [abertaId, setAbertaId] = useState<string | null>(null);
-  const [filtro, setFiltro] = useState<FiltroStatus>("todas");
   const [busca, setBusca] = useState("");
   const [aviso, setAviso] = useState<string | null>(null);
   const router = useRouter();
@@ -68,14 +64,14 @@ export function ListaVendas({
   const visiveis = useMemo(() => {
     const termo = busca.trim().toLowerCase();
 
-    return vendas.filter((venda) => {
-      if (filtro === "pendentes" && venda.pagamento_status !== "pendente") {
+    return aplicarFiltros(vendas, filtros).filter((venda) => {
+      if (status === "pendentes" && venda.pagamento_status !== "pendente") {
         return false;
       }
-      if (filtro === "expiradas" && venda.pagamento_status !== "expirada") {
+      if (status === "expiradas" && venda.pagamento_status !== "expirada") {
         return false;
       }
-      if (filtro === "aprovadas" && venda.pagamento_status !== "aprovada") {
+      if (status === "aprovadas" && venda.pagamento_status !== "aprovada") {
         return false;
       }
       if (!termo) return true;
@@ -91,11 +87,17 @@ export function ListaVendas({
         .toLowerCase()
         .includes(termo);
     });
-  }, [vendas, filtro, busca]);
+  }, [vendas, filtros, status, busca]);
 
-  const pendentes = vendas.filter(
-    (v) => v.pagamento_status === "pendente",
-  ).length;
+  const meses = mesesDisponiveis(vendas);
+  const produtosComVenda = produtos.filter((produto) =>
+    vendas.some((venda) =>
+      venda.produto_id === produto.id || venda.itens.some((item) => item.produto_id === produto.id),
+    ),
+  );
+  const turmasComVenda = turmas.filter((turma) =>
+    vendas.some((venda) => venda.turma_id === turma.id),
+  );
 
   const semCadastros = produtos.length === 0;
 
@@ -104,29 +106,14 @@ export function ListaVendas({
       {!asaasAtivo && <Aviso tom="info">O Asaas ainda não está configurado. Vendas sem Checkout continuam disponíveis e são aprovadas ao anexar o comprovante.</Aviso>}
       {aviso && <Aviso tom="info">{aviso}</Aviso>}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          {FILTROS.map((item) => (
-            <button
-              key={item.chave}
-              type="button"
-              onClick={() => setFiltro(item.chave)}
-              className={pilulaClasses(filtro === item.chave)}
-            >
-              {item.rotulo}
-              {item.chave === "pendentes" && pendentes > 0 && (
-                <span
-                  className={`rounded-full px-1.5 text-xs font-semibold ${
-                    filtro === "pendentes"
-                      ? "bg-white/20 text-white"
-                      : "bg-pendente-fraco text-pendente"
-                  }`}
-                >
-                  {pendentes}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
+        <FiltrosPainel
+          base="/vendas"
+          filtros={filtros}
+          status={status}
+          meses={meses}
+          produtos={produtosComVenda}
+          turmas={turmasComVenda}
+        />
 
         <div className="flex items-center gap-2">
           <Campo
@@ -179,12 +166,12 @@ export function ListaVendas({
           <EstadoVazio
             icone={<IconeVazio className="h-6 w-6" />}
             titulo="Nenhuma venda com esses filtros"
-            descricao="Ajuste a busca ou volte para “Todas” para ver a lista completa."
+            descricao="Ajuste a busca ou limpe os filtros para ver a lista completa."
             acao={
               <Botao
                 variante="secundario"
                 onClick={() => {
-                  setFiltro("todas");
+                  router.push("/vendas", { scroll: false });
                   setBusca("");
                 }}
               >

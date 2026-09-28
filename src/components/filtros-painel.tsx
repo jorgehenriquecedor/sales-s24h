@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { IconeFunil } from "@/components/icones";
 import { Botao } from "@/components/ui";
-import { montarQuery, rotularMes, type Filtros } from "@/lib/filtros";
+import { montarQuery, montarQueryVendas, rotularMes, type Filtros, type StatusFiltro } from "@/lib/filtros";
 
 type Item = { id: string; nome: string };
 
@@ -16,40 +16,46 @@ function nomeDe(itens: Item[], id: string): string {
   return itens.find((i) => i.id === id)?.nome ?? "item removido";
 }
 
-/**
- * Um botão de funil só, com o recorte atual escrito ao lado. As opções de
- * período, produto e turma ficam no painel que abre — em vez de três fileiras
- * de pílulas ocupando o topo da tela o tempo todo.
- *
- * O painel trabalha num rascunho: nada é aplicado enquanto o usuário marca as
- * caixas, e "Aplicar" navega uma única vez. Os filtros continuam morando na
- * URL, então a exportação segue reaproveitando exatamente o mesmo recorte.
- */
-export function FiltrosDashboard({
+const STATUS: { chave: StatusFiltro; rotulo: string }[] = [
+  { chave: "todas", rotulo: "Todas" },
+  { chave: "pendentes", rotulo: "Pendentes" },
+  { chave: "expiradas", rotulo: "Expiradas" },
+  { chave: "aprovadas", rotulo: "Aprovadas" },
+];
+
+/** Painel compartilhado pelo dashboard e pela lista de vendas. */
+export function FiltrosPainel({
   filtros,
   meses,
   produtos,
   turmas,
+  base = "/",
+  status,
 }: {
   filtros: Filtros;
   meses: string[];
   produtos: Item[];
   turmas: Item[];
+  base?: "/" | "/vendas";
+  status?: StatusFiltro;
 }) {
   const router = useRouter();
   const [aberto, setAberto] = useState(false);
   const [rascunho, setRascunho] = useState<Filtros>(filtros);
+  const [rascunhoStatus, setRascunhoStatus] = useState<StatusFiltro>(status ?? "todas");
   const caixa = useRef<HTMLDivElement>(null);
 
   const ativos =
     (filtros.periodo !== "tudo" ? 1 : 0) +
     filtros.produtos.length +
-    filtros.turmas.length;
+    filtros.turmas.length +
+    (status && status !== "todas" ? 1 : 0);
 
   // Abrir sincroniza o rascunho com o que está valendo. Feito aqui, no evento,
   // e não em um efeito reagindo a props.
   function abrir() {
     setRascunho(filtros);
+    setRascunhoStatus(status ?? "todas");
     setAberto(true);
   }
 
@@ -74,17 +80,24 @@ export function FiltrosDashboard({
   }, [aberto]);
 
   function aplicar() {
-    router.push(`/${montarQuery(rascunho)}`, { scroll: false });
+    const query = status === undefined
+      ? montarQuery(rascunho)
+      : montarQueryVendas(rascunho, rascunhoStatus);
+    router.push(`${base}${query}`, { scroll: false });
     setAberto(false);
   }
 
   function limparTudo() {
-    router.push("/", { scroll: false });
+    router.push(base, { scroll: false });
     setAberto(false);
   }
 
   function resumo(): string {
     const partes: string[] = [];
+
+    if (status && status !== "todas") {
+      partes.push(STATUS.find((item) => item.chave === status)?.rotulo ?? status);
+    }
 
     if (filtros.periodo !== "tudo") partes.push(rotularMes(filtros.periodo));
 
@@ -133,6 +146,21 @@ export function FiltrosDashboard({
             className="absolute top-full left-0 z-40 mt-2 w-[min(22rem,calc(100vw-2.5rem))] rounded-2xl border border-borda bg-white shadow-xl"
           >
             <div className="max-h-[26rem] space-y-5 overflow-y-auto px-4 py-4">
+              {status !== undefined && (
+                <Secao titulo="Status">
+                  {STATUS.map((item) => (
+                    <Opcao
+                      key={item.chave}
+                      tipo="radio"
+                      nome="status"
+                      marcada={rascunhoStatus === item.chave}
+                      aoMudar={() => setRascunhoStatus(item.chave)}
+                    >
+                      {item.rotulo}
+                    </Opcao>
+                  ))}
+                </Secao>
+              )}
               <Secao titulo="Período">
                 <Opcao
                   tipo="radio"

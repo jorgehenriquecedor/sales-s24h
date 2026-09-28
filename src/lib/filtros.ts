@@ -7,6 +7,15 @@ export type Filtros = {
   turmas: string[];
 };
 
+export type StatusFiltro = "todas" | "pendentes" | "expiradas" | "aprovadas";
+
+export function lerStatusFiltro(params: ParametrosBrutos): StatusFiltro {
+  const bruto = Array.isArray(params.status) ? params.status[0] : params.status;
+  return bruto === "pendentes" || bruto === "expiradas" || bruto === "aprovadas"
+    ? bruto
+    : "todas";
+}
+
 export type ParametrosBrutos = Record<string, string | string[] | undefined>;
 
 function paraLista(valor: string | string[] | undefined): string[] {
@@ -35,6 +44,13 @@ export function montarQuery(filtros: Filtros): string {
   if (filtros.periodo !== "tudo") sp.set("periodo", filtros.periodo);
   for (const id of filtros.produtos) sp.append("produto", id);
   for (const id of filtros.turmas) sp.append("turma", id);
+  const query = sp.toString();
+  return query ? `?${query}` : "";
+}
+
+export function montarQueryVendas(filtros: Filtros, status: StatusFiltro): string {
+  const sp = new URLSearchParams(montarQuery(filtros).slice(1));
+  if (status !== "todas") sp.set("status", status);
   const query = sp.toString();
   return query ? `?${query}` : "";
 }
