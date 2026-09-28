@@ -17,7 +17,7 @@ function opcoesVisiveis<T extends { id: string; arquivado: boolean }>(
 type Desconto = { tipo: TipoDesconto; valor: number; observacao: string };
 
 export function FormularioVenda({
-  acao, estado, venda, produtos, turmas, aoCancelar, rotuloEnvio,
+  acao, estado, venda, produtos, turmas, aoCancelar, rotuloEnvio, modoVenda,
 }: {
   acao: (formData: FormData) => void;
   estado: Resultado;
@@ -26,6 +26,7 @@ export function FormularioVenda({
   turmas: Turma[];
   aoCancelar: () => void;
   rotuloEnvio: string;
+  modoVenda?: "manual" | "checkout";
 }) {
   const [selecionados, setSelecionados] = useState<string[]>(
     venda?.itens?.length
@@ -79,6 +80,7 @@ export function FormularioVenda({
   return (
     <form action={acao} className="space-y-4">
       {venda && <input type="hidden" name="id" value={venda.id} />}
+      {!venda && <input type="hidden" name="modo_venda" value={modoVenda ?? ""} />}
       <input type="hidden" name="desconto_tipo" value={desconto.tipo} />
       <input type="hidden" name="desconto_valor" value={desconto.valor} />
       <input type="hidden" name="desconto_observacao" value={desconto.observacao} />

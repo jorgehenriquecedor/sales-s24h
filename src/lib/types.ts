@@ -1,5 +1,6 @@
 export type StatusVenda = "comprovante_nao_anexado" | "comprovante_anexado";
 export type StatusPagamento = "nao_monitorado" | "pendente" | "expirada" | "aprovada";
+export type ModoVenda = "manual" | "checkout";
 
 export type Produto = {
   id: string;
@@ -40,6 +41,7 @@ export type Venda = {
   itens: ItemVenda[];
   status: StatusVenda;
   pagamento_status: StatusPagamento;
+  modo_venda: ModoVenda;
   asaas_checkout_id: string | null;
   asaas_checkout_url: string | null;
   asaas_checkout_expira_em: string | null;
@@ -52,4 +54,4 @@ export type Venda = {
 
 /** Colunas selecionadas em toda consulta de venda. */
 export const COLUNAS_VENDA =
-  "id, comprador_nome, comprador_telefone, comprador_email, produto_id, turma_id, produto_nome, turma_nome, valor, valor_bruto, desconto_tipo, desconto_valor, desconto_observacao, itens:venda_itens(produto_id, produto_nome, preco_unitario, ordem), status, pagamento_status, asaas_checkout_id, asaas_checkout_url, asaas_checkout_expira_em, asaas_pagamento_id, asaas_comprovante_url, comprovante_path, comprovante_nome, created_at";
+  "id, comprador_nome, comprador_telefone, comprador_email, produto_id, turma_id, produto_nome, turma_nome, valor, valor_bruto, desconto_tipo, desconto_valor, desconto_observacao, itens:venda_itens(produto_id, produto_nome, preco_unitario, ordem), status, pagamento_status, modo_venda, asaas_checkout_id, asaas_checkout_url, asaas_checkout_expira_em, asaas_pagamento_id, asaas_comprovante_url, comprovante_path, comprovante_nome, created_at";

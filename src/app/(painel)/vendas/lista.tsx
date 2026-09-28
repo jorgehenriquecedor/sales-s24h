@@ -24,10 +24,11 @@ import { DetalheVenda } from "./detalhe";
 const VAZIO_VENDA: ResultadoVenda = {};
 
 type FiltroStatus = "todas" | "pendentes" | "expiradas" | "aprovadas";
+type ModoNova = "escolher" | "checkout" | "manual" | null;
 
 const FILTROS: { chave: FiltroStatus; rotulo: string }[] = [
   { chave: "todas", rotulo: "Todas" },
-  { chave: "pendentes", rotulo: "Aguardando pagamento" },
+  { chave: "pendentes", rotulo: "Pendentes" },
   { chave: "expiradas", rotulo: "Expiradas" },
   { chave: "aprovadas", rotulo: "Aprovadas" },
 ];
@@ -43,7 +44,7 @@ export function ListaVendas({
   turmas: Turma[];
   asaasAtivo: boolean;
 }) {
-  const [novaAberta, setNovaAberta] = useState(false);
+  const [modoNova, setModoNova] = useState<ModoNova>(null);
   const [abertaId, setAbertaId] = useState<string | null>(null);
   const [filtro, setFiltro] = useState<FiltroStatus>("todas");
   const [busca, setBusca] = useState("");
@@ -51,7 +52,7 @@ export function ListaVendas({
   const router = useRouter();
 
   useEffect(() => {
-    if (!vendas.some((v) => v.pagamento_status === "pendente" ||
+    if (!vendas.some((v) => (v.modo_venda === "checkout" && v.pagamento_status === "pendente") ||
       v.pagamento_status === "expirada" ||
       (v.pagamento_status === "aprovada" && !v.comprovante_path && !v.asaas_comprovante_url))) return;
     const timer = window.setInterval(() => router.refresh(), 30_000);
@@ -100,7 +101,7 @@ export function ListaVendas({
 
   return (
     <div className="space-y-5">
-      {!asaasAtivo && <Aviso tom="info">O Asaas ainda não está configurado. Você pode registrar vendas e descontos agora; elas ficarão sem checkout até a ativação.</Aviso>}
+      {!asaasAtivo && <Aviso tom="info">O Asaas ainda não está configurado. Vendas sem Checkout continuam disponíveis e são aprovadas ao anexar o comprovante.</Aviso>}
       {aviso && <Aviso tom="info">{aviso}</Aviso>}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
@@ -137,7 +138,7 @@ export function ListaVendas({
             className="w-56"
           />
           <Botao
-            onClick={() => setNovaAberta(true)}
+            onClick={() => setModoNova("escolher")}
             disabled={semCadastros}
             title={
               semCadastros ? "Cadastre ao menos um produto antes" : undefined
@@ -157,9 +158,7 @@ export function ListaVendas({
             descricao={
               semCadastros
                 ? "Antes de registrar a primeira venda, cadastre pelo menos um produto."
-                : asaasAtivo
-                  ? "Registre a primeira venda para gerar um checkout Asaas e acompanhar o pagamento."
-                  : "Registre a primeira venda. Você poderá gerar o checkout nela após configurar o Asaas."
+                : "Registre a primeira venda com Checkout Asaas ou com comprovante manual."
             }
             acao={
               semCadastros ? (
@@ -169,7 +168,7 @@ export function ListaVendas({
                   )}
                 </div>
               ) : (
-                <Botao onClick={() => setNovaAberta(true)}>
+                <Botao onClick={() => setModoNova("escolher")}>
                   <IconeMais className="h-4 w-4" />
                   Registrar venda
                 </Botao>
@@ -266,9 +265,10 @@ export function ListaVendas({
       )}
 
       <ModalNovaVenda
-        aberto={novaAberta}
-        aoFechar={() => setNovaAberta(false)}
-        aoCriar={(id, mensagem) => { setNovaAberta(false); setAbertaId(id); setAviso(mensagem ?? null); router.refresh(); }}
+        modo={modoNova}
+        aoEscolher={setModoNova}
+        aoFechar={() => setModoNova(null)}
+        aoCriar={(id, mensagem) => { setModoNova(null); setAbertaId(id); setAviso(mensagem ?? null); router.refresh(); }}
         asaasAtivo={asaasAtivo}
         produtos={produtos}
         turmas={turmas}
@@ -287,14 +287,16 @@ export function ListaVendas({
 }
 
 function ModalNovaVenda({
-  aberto,
+  modo,
+  aoEscolher,
   aoFechar,
   aoCriar,
   asaasAtivo,
   produtos,
   turmas,
 }: {
-  aberto: boolean;
+  modo: ModoNova;
+  aoEscolher: (modo: ModoNova) => void;
   aoFechar: () => void;
   aoCriar: (id: string, aviso?: string) => void;
   asaasAtivo: boolean;
@@ -312,15 +314,30 @@ function ModalNovaVenda({
 
   return (
     <Modal
-      aberto={aberto}
+      aberto={modo !== null}
       aoFechar={aoFechar}
-      titulo="Nova venda"
-      descricao={asaasAtivo
-        ? "Ao registrar, geramos um checkout Asaas válido por 24 horas para esta venda."
-        : "O registro será salvo sem checkout. O link poderá ser gerado após configurar o Asaas."}
+      titulo={modo === "escolher" ? "Nova venda" : modo === "checkout" ? "Nova venda com Checkout" : "Nova venda sem Checkout"}
+      descricao={modo === "escolher" ? "Escolha como esta venda será aprovada."
+        : modo === "checkout" ? "O Checkout Asaas será gerado ao registrar a venda."
+          : "A venda ficará pendente até você anexar o comprovante."}
       largura="max-w-2xl"
     >
-      {aberto && (
+      {modo === "escolher" && (
+        <div className="space-y-3">
+          <button type="button" disabled={!asaasAtivo} onClick={() => aoEscolher("checkout")}
+            className="block w-full rounded-xl border border-borda-forte p-4 text-left transition-colors hover:border-brasa hover:bg-papel disabled:cursor-not-allowed disabled:opacity-55">
+            <span className="block font-semibold text-tinta">Com Checkout</span>
+            <span className="mt-1 block text-sm text-neutro">Gera o link Asaas. O pagamento aprova a venda e vincula o comprovante automaticamente.</span>
+          </button>
+          <button type="button" onClick={() => aoEscolher("manual")}
+            className="block w-full rounded-xl border border-borda-forte p-4 text-left transition-colors hover:border-brasa hover:bg-papel">
+            <span className="block font-semibold text-tinta">Sem Checkout</span>
+            <span className="mt-1 block text-sm text-neutro">A venda fica pendente. Anexe o comprovante para aprová-la.</span>
+          </button>
+          {!asaasAtivo && <Aviso tom="info">Com Checkout estará disponível após configurar a chave e o webhook do Asaas.</Aviso>}
+        </div>
+      )}
+      {(modo === "checkout" || modo === "manual") && (
         <FormularioVenda
           acao={acao}
           estado={estado}
@@ -328,7 +345,8 @@ function ModalNovaVenda({
           produtos={produtos}
           turmas={turmas}
           aoCancelar={aoFechar}
-          rotuloEnvio={asaasAtivo ? "Registrar e gerar checkout" : "Registrar venda"}
+          rotuloEnvio={modo === "checkout" ? "Registrar e gerar checkout" : "Registrar venda"}
+          modoVenda={modo}
         />
       )}
     </Modal>

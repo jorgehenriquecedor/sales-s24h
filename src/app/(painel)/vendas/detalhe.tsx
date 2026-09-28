@@ -165,7 +165,7 @@ export function DetalheVenda({
             </div>
           </dl>
 
-          <section className="rounded-xl border border-borda bg-papel p-4 space-y-3">
+          {venda.modo_venda === "checkout" ? <section className="rounded-xl border border-borda bg-papel p-4 space-y-3">
             <h3 className="text-sm font-semibold text-tinta">Checkout Asaas</h3>
             {venda.pagamento_status === "pendente" && venda.asaas_checkout_url && (
               <>
@@ -188,12 +188,17 @@ export function DetalheVenda({
               ) : <p className="text-sm text-neutro">O checkout estará disponível quando a integração Asaas for configurada.</p>
             )}
             {estadoCheckout.erro && <Aviso>{estadoCheckout.erro}</Aviso>}
-          </section>
+          </section> : <section className="rounded-xl border border-borda bg-papel p-4 space-y-2">
+            <h3 className="text-sm font-semibold text-tinta">Venda sem Checkout</h3>
+            <p className="text-sm text-neutro">{venda.pagamento_status === "aprovada"
+              ? "Venda aprovada com o comprovante anexado. Se ele for removido, a venda volta a ficar pendente."
+              : "Venda pendente. Anexe o comprovante abaixo para aprová-la."}</p>
+          </section>}
 
           <BlocoComprovante venda={venda} />
 
           <div className="flex flex-wrap justify-between gap-2 border-t border-borda pt-4">
-            {venda.pagamento_status === "nao_monitorado" ? (
+            {venda.modo_venda === "manual" || (venda.modo_venda === "checkout" && !venda.asaas_checkout_id) ? (
               <Botao variante="perigo" onClick={() => setModo("excluir")}>
                 <IconeLixeira className="h-4 w-4" />
                 Excluir venda
@@ -203,7 +208,8 @@ export function DetalheVenda({
               <Botao variante="secundario" onClick={aoFechar}>
                 Fechar
               </Botao>
-              {venda.pagamento_status === "nao_monitorado" && <Botao onClick={() => setModo("editar")}>Editar dados</Botao>}
+              {(venda.modo_venda === "manual" || (venda.modo_venda === "checkout" && !venda.asaas_checkout_id)) &&
+                <Botao onClick={() => setModo("editar")}>Editar dados</Botao>}
             </div>
           </div>
         </div>
@@ -386,7 +392,9 @@ function BlocoComprovante({ venda }: { venda: Venda }) {
       ) : (
         <div className="mt-3 space-y-3">
           <p className="text-sm text-neutro">
-            {venda.pagamento_status === "aprovada"
+            {venda.modo_venda === "manual"
+              ? "Anexe uma imagem ou PDF do comprovante. A venda será aprovada automaticamente após o anexo."
+              : venda.pagamento_status === "aprovada"
               ? "O pagamento foi aprovado. Se o Asaas fornecer apenas uma página de comprovante, use o link acima ou anexe um arquivo manualmente."
               : "O comprovante será anexado quando o Asaas o disponibilizar. Você também pode anexar uma imagem ou PDF manualmente."}
           </p>

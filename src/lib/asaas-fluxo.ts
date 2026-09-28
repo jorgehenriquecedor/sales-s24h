@@ -8,6 +8,7 @@ type VendaCheckout = {
   turma_nome: string;
   valor: number;
   pagamento_status: string;
+  modo_venda: string;
   asaas_checkout_id: string | null;
   asaas_checkout_reserva: string | null;
   updated_at: string;
@@ -17,10 +18,11 @@ type VendaCheckout = {
 export async function gerarCheckout(vendaId: string) {
   const admin = adminClient();
   const { data: venda, error } = await admin.from("vendas")
-    .select("id, turma_nome, valor, pagamento_status, asaas_checkout_id, asaas_checkout_reserva, updated_at")
+    .select("id, turma_nome, valor, pagamento_status, modo_venda, asaas_checkout_id, asaas_checkout_reserva, updated_at")
     .eq("id", vendaId).single();
   if (error || !venda) throw new Error("Venda não encontrada.");
   const atual = venda as VendaCheckout;
+  if (atual.modo_venda !== "checkout") throw new Error("Esta venda foi registrada sem checkout.");
   if (atual.asaas_checkout_reserva) {
     if (Date.now() - Date.parse(atual.updated_at) < 5 * 60_000) {
       throw new Error("A geração do checkout desta venda já está em andamento.");

@@ -36,7 +36,8 @@ Em <https://supabase.com/dashboard>, **New project**. Guarde a senha do banco.
 No projeto criado, abra **SQL Editor → New query** e execute, nesta ordem,
 [`supabase/schema.sql`](supabase/schema.sql),
 [`20260928150000_asaas_checkout.sql`](supabase/migrations/20260928150000_asaas_checkout.sql)
-e [`20260928170000_venda_multiplos_produtos.sql`](supabase/migrations/20260928170000_venda_multiplos_produtos.sql).
+[`20260928170000_venda_multiplos_produtos.sql`](supabase/migrations/20260928170000_venda_multiplos_produtos.sql)
+e [`20260928190000_modos_venda.sql`](supabase/migrations/20260928190000_modos_venda.sql).
 Esses scripts criam as tabelas, políticas, funções de venda, histórico de
 checkouts e bucket privado de comprovantes. São idempotentes.
 
@@ -109,6 +110,8 @@ npm test           # suíte de testes (ver abaixo)
   conferindo os triggers, as restrições e a proteção do histórico.
 - **itens e descontos** — as migrações e funções do banco são executadas em
   PGlite; testam preços somados, desconto, permissões e vendas antigas.
+- **modos de venda** — testa a aprovação manual pelo comprovante, a reversão
+  quando ele é removido e a separação da confirmação do Asaas.
 - **rateio** — confere que os itens enviados ao Asaas somam exatamente o
   valor final da venda, inclusive após arredondamento em centavos.
 
@@ -128,10 +131,12 @@ permite desconto em percentual ou reais, com observação opcional. O banco
 calcula e grava o valor final; editar o HTML não altera esse valor. A turma
 também fica congelada no registro.
 
-**O Checkout é independente da aba aberta.** O webhook do Asaas atualiza a
-venda após pagamento ou expiração, mesmo horas depois. Uma venda expirada
-pode receber outro checkout no mesmo registro. Sem chave do Asaas, o painel
-permite salvar a venda como **sem checkout** e gerar o link após a ativação.
+**O modo é escolhido antes de registrar.** Em **Com Checkout**, o Asaas gera o
+link, e o webhook aprova a venda após o pagamento, mesmo horas depois. Uma
+venda expirada pode receber outro checkout no mesmo registro. Em **Sem
+Checkout**, a venda fica pendente e é aprovada quando o comprovante é anexado
+manualmente. Remover o comprovante devolve a venda ao estado pendente. Sem a
+chave do Asaas, só o modo manual fica disponível.
 
 **O status do comprovante é garantido pelo banco.** Um trigger mantém a regra
 `status = 'comprovante_anexado'` se, e somente se, existe arquivo anexado. Não
@@ -188,7 +193,7 @@ src/
     pdf.ts               # geração do relatório em PDF
     dados.ts             # leitura
 supabase/schema.sql      # base do banco
-supabase/migrations/     # Checkout, itens e descontos
+supabase/migrations/     # Checkout, itens, descontos e modos de venda
 tests/                   # suítes de lógica, PDF, banco e rateio
 ```
 

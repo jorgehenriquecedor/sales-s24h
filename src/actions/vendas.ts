@@ -71,6 +71,11 @@ export async function criarVenda(
   _anterior: ResultadoVenda,
   formData: FormData,
 ): Promise<ResultadoVenda> {
+  const modo = String(formData.get("modo_venda") ?? "");
+  if (modo !== "manual" && modo !== "checkout") return { erro: "Escolha Com Checkout ou Sem Checkout." };
+  if (modo === "checkout" && !asaasConfigurado()) {
+    return { erro: "A integração Asaas ainda não está configurada. Escolha Sem Checkout ou configure o Asaas." };
+  }
   const campos = lerCampos(formData);
   const invalido = validar(campos);
   if (invalido) return { erro: invalido };
@@ -78,16 +83,14 @@ export async function criarVenda(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { erro: "Faça login novamente para criar a venda." };
-  const { data: id, error } = await supabase.rpc("criar_venda_com_produtos", parametros(campos));
+  const { data: id, error } = await supabase.rpc("criar_venda_com_modo", {
+    ...parametros(campos), p_modo_venda: modo,
+  });
   if (error || !id) return { erro: `Não foi possível registrar a venda: ${error?.message ?? "erro desconhecido"}` };
 
-  if (!asaasConfigurado()) {
+  if (modo === "manual") {
     revalidarTudo();
-    return {
-      ok: true,
-      vendaId: id,
-      aviso: "Venda salva sem checkout. A integração Asaas ainda não está configurada; gere o checkout nesta mesma venda depois da ativação.",
-    };
+    return { ok: true, vendaId: id };
   }
 
   try {
@@ -115,8 +118,9 @@ export async function gerarCheckoutNovamente(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { erro: "Faça login novamente." };
-  const { data: venda } = await supabase.from("vendas").select("id").eq("id", id).maybeSingle();
+  const { data: venda } = await supabase.from("vendas").select("id, modo_venda").eq("id", id).maybeSingle();
   if (!venda) return { erro: "Venda não encontrada." };
+  if (venda.modo_venda !== "checkout") return { erro: "Esta venda foi registrada sem checkout." };
   try {
     await gerarCheckout(id);
   } catch (falha) {

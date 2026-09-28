@@ -1,7 +1,7 @@
 -- =====================================================================
 -- Controle de Vendas — Prova Oral Suporte 24h
 -- Base do banco (idempotente). Execute também os arquivos em migrations/
--- em ordem para instalar Checkout Asaas, itens e descontos.
+-- em ordem para instalar Checkout Asaas, itens, descontos e modos de venda.
 -- =====================================================================
 
 -- ---------------------------------------------------------------------

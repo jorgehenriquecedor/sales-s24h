@@ -110,14 +110,14 @@ export default async function PaginaInicio({
               icone={<IconeDinheiro />}
               rotulo="Valor aprovado"
               valor={formatarMoeda(resumo.total)}
-              apoio={`Pagamentos confirmados em ${rotuloPeriodo}`}
+              apoio={`Vendas aprovadas em ${rotuloPeriodo}`}
             />
             <CartaoMetrica
               tom="verde"
               icone={<IconeVendas />}
               rotulo="Vendas aprovadas"
               valor={String(resumo.quantidade)}
-              apoio="Pagamentos confirmados no recorte"
+              apoio="Vendas aprovadas no recorte"
             />
             <CartaoMetrica
               tom="roxo"
@@ -129,12 +129,12 @@ export default async function PaginaInicio({
             <CartaoMetrica
               tom="vermelho"
               icone={<IconeAlerta />}
-              rotulo="Aguardando pagamento"
+              rotulo="Pendentes"
               valor={String(aguardando)}
               apoio={
                 aguardando === 0
                   ? "Tudo em dia neste recorte"
-                  : "Vendas com checkout pendente"
+                  : "Vendas ainda pendentes"
               }
             />
           </div>

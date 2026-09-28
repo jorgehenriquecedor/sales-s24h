@@ -156,8 +156,8 @@ export function EtiquetaStatus({ status }: { status: StatusVenda }) {
 
 export function EtiquetaPagamento({ status }: { status: StatusPagamento }) {
   const rotulos: Record<StatusPagamento, string> = {
-    nao_monitorado: "Sem checkout",
-    pendente: "Aguardando pagamento",
+    nao_monitorado: "Checkout não gerado",
+    pendente: "Pendente",
     expirada: "Checkout expirado",
     aprovada: "Venda aprovada",
   };
