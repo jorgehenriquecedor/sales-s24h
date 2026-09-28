@@ -157,7 +157,9 @@ export function ListaVendas({
             descricao={
               semCadastros
                 ? "Antes de registrar a primeira venda, cadastre pelo menos um produto."
-                : "Registre a primeira venda para gerar um checkout Asaas e acompanhar o pagamento."
+                : asaasAtivo
+                  ? "Registre a primeira venda para gerar um checkout Asaas e acompanhar o pagamento."
+                  : "Registre a primeira venda. Você poderá gerar o checkout nela após configurar o Asaas."
             }
             acao={
               semCadastros ? (
