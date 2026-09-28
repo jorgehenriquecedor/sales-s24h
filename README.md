@@ -1,8 +1,7 @@
 # Controle de Vendas — Prova Oral Suporte 24h
 
-Painel interno para registrar as vendas fechadas pelo link de pagamento do
-Asaas, com o controle que o Asaas não dá: comprador, produto, turma, valor
-negociado e comprovante de pagamento anexado.
+Painel interno para registrar vendas de um ou mais produtos, aplicar descontos
+com valor calculado no banco e acompanhar Checkout e comprovante do Asaas.
 
 Cinco telas: **Início** (dashboard com filtros e exportação), **Vendas**,
 **Produtos**, **Turmas** e **login**.
@@ -34,13 +33,12 @@ Em <https://supabase.com/dashboard>, **New project**. Guarde a senha do banco.
 
 ### 2. Criar as tabelas, as políticas e o bucket
 
-No projeto criado, abra **SQL Editor → New query**, cole o conteúdo inteiro de
-[`supabase/schema.sql`](supabase/schema.sql) e clique em **Run**.
-
-Esse único script cria as tabelas `produtos`, `turmas` e `vendas`, os índices,
-os triggers, as políticas de RLS e o bucket privado `comprovantes` com as
-políticas de acesso. Ele é idempotente: rodar de novo não quebra nada e não
-apaga dados.
+No projeto criado, abra **SQL Editor → New query** e execute, nesta ordem,
+[`supabase/schema.sql`](supabase/schema.sql),
+[`20260928150000_asaas_checkout.sql`](supabase/migrations/20260928150000_asaas_checkout.sql)
+e [`20260928170000_venda_multiplos_produtos.sql`](supabase/migrations/20260928170000_venda_multiplos_produtos.sql).
+Esses scripts criam as tabelas, políticas, funções de venda, histórico de
+checkouts e bucket privado de comprovantes. São idempotentes.
 
 ### 3. Criar o usuário de acesso
 
@@ -61,9 +59,13 @@ Em **Project Settings → API**:
 | --- | --- |
 | `NEXT_PUBLIC_SUPABASE_URL` | Project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | anon / public key |
+| `SUPABASE_SERVICE_ROLE_KEY` | service_role; segredo exclusivo do servidor para webhooks |
 
-As duas são públicas por natureza — quem protege os dados é o RLS, não o
-segredo da chave. Nenhuma `service_role key` é usada neste projeto.
+As duas variáveis `NEXT_PUBLIC_` são públicas por natureza; quem protege os
+dados é o RLS. A chave `service_role` nunca deve ser enviada ao navegador.
+Para ativar o Checkout, configure também `ASAAS_API_KEY`,
+`ASAAS_WEBHOOK_TOKEN`, `ASAAS_AMBIENTE` e `ASAAS_CALLBACK_BASE_URL` conforme
+[`docs/integracao-asaas.md`](docs/integracao-asaas.md).
 
 ### 5. Rodar local
 
@@ -76,8 +78,8 @@ npm run dev                  # http://localhost:3000
 ### 6. Publicar na Vercel
 
 1. <https://vercel.com/new> → importe este repositório.
-2. Em **Environment Variables**, adicione `NEXT_PUBLIC_SUPABASE_URL` e
-   `NEXT_PUBLIC_SUPABASE_ANON_KEY` (marque Production, Preview e Development).
+2. Em **Environment Variables**, adicione as variáveis da seção anterior para
+   os ambientes desejados. Marque as chaves de serviço e do Asaas como segredo.
 3. **Deploy**.
 
 Se o painel abrir na tela “Configuração pendente”, as variáveis não chegaram ao
@@ -96,7 +98,7 @@ npm run typecheck  # TypeScript
 npm test           # suíte de testes (ver abaixo)
 ```
 
-`npm test` roda três suítes, sem precisar de rede nem de banco externo:
+`npm test` roda as suítes sem precisar de rede nem de banco externo:
 
 - **lógica** — leitura e escrita dos filtros na URL, agrupamento por mês no
   fuso de São Paulo, entrada de valores em pt-BR, totais e ticket médio;
@@ -105,6 +107,10 @@ npm test           # suíte de testes (ver abaixo)
   caracteres fora do latim, nome do arquivo;
 - **schema** — o `schema.sql` é executado em um Postgres de verdade (PGlite),
   conferindo os triggers, as restrições e a proteção do histórico.
+- **itens e descontos** — as migrações e funções do banco são executadas em
+  PGlite; testam preços somados, desconto, permissões e vendas antigas.
+- **rateio** — confere que os itens enviados ao Asaas somam exatamente o
+  valor final da venda, inclusive após arredondamento em centavos.
 
 ---
 
@@ -116,9 +122,16 @@ estrangeira é `on delete restrict`). Para tirá-lo do formulário de novas vend
 sem mexer nos relatórios, use **Arquivar**: ele some do formulário, continua nos
 filtros do dashboard e o histórico fica intacto. A mesma regra vale para turmas.
 
-**O nome do produto e da turma fica congelado na venda.** Cada venda guarda
-`produto_nome` e `turma_nome` como estavam no momento do registro. Renomear um
-produto depois não reescreve o passado, e o relatório continua legível.
+**Os produtos e preços ficam congelados na venda.** Cada item guarda o nome e
+preço do momento do registro. O formulário soma os preços automaticamente e
+permite desconto em percentual ou reais, com observação opcional. O banco
+calcula e grava o valor final; editar o HTML não altera esse valor. A turma
+também fica congelada no registro.
+
+**O Checkout é independente da aba aberta.** O webhook do Asaas atualiza a
+venda após pagamento ou expiração, mesmo horas depois. Uma venda expirada
+pode receber outro checkout no mesmo registro. Sem chave do Asaas, o painel
+permite salvar a venda como **sem checkout** e gerar o link após a ativação.
 
 **O status do comprovante é garantido pelo banco.** Um trigger mantém a regra
 `status = 'comprovante_anexado'` se, e somente se, existe arquivo anexado. Não
@@ -137,7 +150,7 @@ válida por 10 minutos. Nenhum arquivo fica acessível por URL pública.
 **Os filtros do dashboard moram na URL.** Período, produtos e turmas viram
 parâmetros (`?periodo=2026-01&produto=…&turma=…`). Por isso o botão de exportar
 é só um link para `/api/relatorio` com os mesmos parâmetros — o relatório sai
-sempre com o recorte que está na tela, sem estado duplicado para dessincronizar.
+com as vendas aprovadas do recorte, sem estado duplicado para dessincronizar.
 O cabeçalho do PDF repete esse recorte por extenso, então o arquivo diz sozinho
 o que está sendo mostrado.
 
@@ -174,8 +187,9 @@ src/
     filtros.ts           # períodos e filtros combináveis
     pdf.ts               # geração do relatório em PDF
     dados.ts             # leitura
-supabase/schema.sql      # provisionamento completo do banco
-tests/                   # suítes de lógica, PDF e schema
+supabase/schema.sql      # base do banco
+supabase/migrations/     # Checkout, itens e descontos
+tests/                   # suítes de lógica, PDF, banco e rateio
 ```
 
 ---

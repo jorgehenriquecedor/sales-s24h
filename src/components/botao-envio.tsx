@@ -8,15 +8,17 @@ export function BotaoEnvio({
   carregando = "Salvando…",
   variante = "primario",
   className = "",
+  disabled = false,
 }: {
   children: React.ReactNode;
   carregando?: string;
   variante?: "primario" | "secundario" | "fantasma" | "perigo";
   className?: string;
+  disabled?: boolean;
 }) {
   const { pending } = useFormStatus();
   return (
-    <Botao type="submit" variante={variante} disabled={pending} className={className}>
+    <Botao type="submit" variante={variante} disabled={pending || disabled} className={className}>
       {pending ? carregando : children}
     </Botao>
   );

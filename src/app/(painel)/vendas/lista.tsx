@@ -100,7 +100,7 @@ export function ListaVendas({
 
   return (
     <div className="space-y-5">
-      {!asaasAtivo && <Aviso tom="info">A integração Asaas aguarda a chave de API e o token do webhook. Novas vendas com checkout estarão disponíveis após a configuração.</Aviso>}
+      {!asaasAtivo && <Aviso tom="info">O Asaas ainda não está configurado. Você pode registrar vendas e descontos agora; elas ficarão sem checkout até a ativação.</Aviso>}
       {aviso && <Aviso tom="info">{aviso}</Aviso>}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
@@ -138,9 +138,9 @@ export function ListaVendas({
           />
           <Botao
             onClick={() => setNovaAberta(true)}
-            disabled={semCadastros || !asaasAtivo}
+            disabled={semCadastros}
             title={
-              semCadastros ? "Cadastre ao menos um produto antes" : !asaasAtivo ? "Configure a integração Asaas" : undefined
+              semCadastros ? "Cadastre ao menos um produto antes" : undefined
             }
           >
             <IconeMais className="h-4 w-4" />
@@ -167,7 +167,7 @@ export function ListaVendas({
                   )}
                 </div>
               ) : (
-                <Botao onClick={() => setNovaAberta(true)} disabled={!asaasAtivo}>
+                <Botao onClick={() => setNovaAberta(true)}>
                   <IconeMais className="h-4 w-4" />
                   Registrar venda
                 </Botao>
@@ -232,7 +232,10 @@ export function ListaVendas({
                         </span>
                       )}
                     </td>
-                    <td className="px-5 py-3.5 text-tinta">{venda.produto_nome}</td>
+                    <td className="px-5 py-3.5 text-tinta">
+                      <span className="block">{venda.produto_nome}</span>
+                      {venda.itens.length > 1 && <span className="text-xs text-neutro">{venda.itens.length} produtos</span>}
+                    </td>
                     <td className="px-5 py-3.5 text-neutro">{venda.turma_nome}</td>
                     <td className="px-5 py-3.5 text-right font-medium tabular-nums text-tinta">
                       {formatarMoeda(venda.valor)}
@@ -264,6 +267,7 @@ export function ListaVendas({
         aberto={novaAberta}
         aoFechar={() => setNovaAberta(false)}
         aoCriar={(id, mensagem) => { setNovaAberta(false); setAbertaId(id); setAviso(mensagem ?? null); router.refresh(); }}
+        asaasAtivo={asaasAtivo}
         produtos={produtos}
         turmas={turmas}
       />
@@ -273,6 +277,7 @@ export function ListaVendas({
         venda={vendaAberta}
         produtos={produtos}
         turmas={turmas}
+        asaasAtivo={asaasAtivo}
         aoFechar={() => setAbertaId(null)}
       />
     </div>
@@ -283,12 +288,14 @@ function ModalNovaVenda({
   aberto,
   aoFechar,
   aoCriar,
+  asaasAtivo,
   produtos,
   turmas,
 }: {
   aberto: boolean;
   aoFechar: () => void;
   aoCriar: (id: string, aviso?: string) => void;
+  asaasAtivo: boolean;
   produtos: Produto[];
   turmas: Turma[];
 }) {
@@ -306,7 +313,9 @@ function ModalNovaVenda({
       aberto={aberto}
       aoFechar={aoFechar}
       titulo="Nova venda"
-      descricao="Ao registrar, geramos um checkout Asaas válido por 24 horas para esta venda."
+      descricao={asaasAtivo
+        ? "Ao registrar, geramos um checkout Asaas válido por 24 horas para esta venda."
+        : "O registro será salvo sem checkout. O link poderá ser gerado após configurar o Asaas."}
       largura="max-w-2xl"
     >
       {aberto && (
@@ -317,7 +326,7 @@ function ModalNovaVenda({
           produtos={produtos}
           turmas={turmas}
           aoCancelar={aoFechar}
-          rotuloEnvio="Registrar e gerar checkout"
+          rotuloEnvio={asaasAtivo ? "Registrar e gerar checkout" : "Registrar venda"}
         />
       )}
     </Modal>

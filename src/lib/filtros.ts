@@ -117,7 +117,10 @@ export function aplicarFiltros(vendas: Venda[], filtros: Filtros): Venda[] {
     if (filtros.periodo !== "tudo" && chaveMes(venda.created_at) !== filtros.periodo) {
       return false;
     }
-    if (produtos.size > 0 && !(venda.produto_id && produtos.has(venda.produto_id))) {
+    if (produtos.size > 0 && !(
+      venda.itens?.some((item) => item.produto_id && produtos.has(item.produto_id)) ||
+      (venda.produto_id && produtos.has(venda.produto_id))
+    )) {
       return false;
     }
     if (turmas.size > 0 && !(venda.turma_id && turmas.has(venda.turma_id))) {

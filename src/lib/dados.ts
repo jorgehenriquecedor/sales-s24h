@@ -45,8 +45,28 @@ export async function listarVendas(): Promise<Venda[]> {
 
   if (error) throw new Error(`Erro ao carregar vendas: ${error.message}`);
 
-  return (data ?? []).map((v) => ({ ...v, valor: comoNumero(v.valor) }));
+  return (data ?? []).map(mapearVenda);
 }
+
+function mapearVenda(v: Record<string, unknown>): Venda {
+  const itens = (v.itens as ItemVendaBruto[] | null) ?? [];
+  return {
+    ...v,
+    valor: comoNumero(v.valor),
+    valor_bruto: comoNumero(v.valor_bruto),
+    desconto_valor: comoNumero(v.desconto_valor),
+    itens: itens.map((item) => ({
+      ...item, preco_unitario: comoNumero(item.preco_unitario),
+    })).sort((a, b) => a.ordem - b.ordem),
+  } as Venda;
+}
+
+type ItemVendaBruto = {
+  produto_id: string | null;
+  produto_nome: string;
+  preco_unitario: unknown;
+  ordem: number;
+};
 
 export async function buscarVenda(id: string): Promise<Venda | null> {
   const supabase = await createClient();
@@ -59,7 +79,7 @@ export async function buscarVenda(id: string): Promise<Venda | null> {
   if (error) throw new Error(`Erro ao carregar a venda: ${error.message}`);
   if (!data) return null;
 
-  return { ...data, valor: comoNumero(data.valor) };
+  return mapearVenda(data);
 }
 
 /**
@@ -71,19 +91,23 @@ export async function contarVinculos(): Promise<{
   porTurma: Record<string, number>;
 }> {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("vendas")
-    .select("produto_id, turma_id");
-
-  if (error) throw new Error(`Erro ao verificar vínculos: ${error.message}`);
+  const [produtos, turmas] = await Promise.all([
+    supabase.from("venda_itens").select("produto_id"),
+    supabase.from("vendas").select("turma_id"),
+  ]);
+  if (produtos.error || turmas.error) {
+    throw new Error(`Erro ao verificar vínculos: ${produtos.error?.message ?? turmas.error?.message}`);
+  }
 
   const porProduto: Record<string, number> = {};
   const porTurma: Record<string, number> = {};
 
-  for (const linha of data ?? []) {
+  for (const linha of produtos.data ?? []) {
     if (linha.produto_id) {
       porProduto[linha.produto_id] = (porProduto[linha.produto_id] ?? 0) + 1;
     }
+  }
+  for (const linha of turmas.data ?? []) {
     if (linha.turma_id) {
       porTurma[linha.turma_id] = (porTurma[linha.turma_id] ?? 0) + 1;
     }

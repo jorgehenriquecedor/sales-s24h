@@ -12,7 +12,8 @@ O Supabase Auth deste projeto não aceita cadastro público. É necessário ter 
 
 ## Comportamento
 
-- Cada nova venda gera um Checkout único, com Pix e cartão, válido por 1440 minutos.
+- Com a integração configurada, cada nova venda gera um Checkout único, com Pix e cartão, válido por 1440 minutos. Antes da ativação, o painel permite salvar a venda sem checkout e gerar o link no mesmo registro depois.
+- Uma venda pode conter até 20 produtos. O banco soma os preços cadastrados, aplica um desconto percentual ou fixo e guarda preços, valor bruto, desconto, observação e valor final. O valor não é aceito do formulário. O Checkout recebe os itens com o desconto rateado em centavos, de modo que sua soma corresponde ao valor final da venda.
 - O Asaas envia eventos para o servidor. O navegador não precisa permanecer aberto. O painel aberto consulta o banco a cada 30 segundos para mostrar alterações que já chegaram pelo webhook.
 - Ao expirar, o registro da venda permanece. **Gerar checkout novamente** cria outra tentativa vinculada à mesma venda.
 - Um evento de expiração de tentativa antiga não altera o status da tentativa atual.

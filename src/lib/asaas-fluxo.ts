@@ -5,8 +5,6 @@ import { BUCKET_COMPROVANTES } from "./comprovante";
 
 type VendaCheckout = {
   id: string;
-  produto_id: string | null;
-  produto_nome: string;
   turma_nome: string;
   valor: number;
   pagamento_status: string;
@@ -19,7 +17,7 @@ type VendaCheckout = {
 export async function gerarCheckout(vendaId: string) {
   const admin = adminClient();
   const { data: venda, error } = await admin.from("vendas")
-    .select("id, produto_id, produto_nome, turma_nome, valor, pagamento_status, asaas_checkout_id, asaas_checkout_reserva, updated_at")
+    .select("id, turma_nome, valor, pagamento_status, asaas_checkout_id, asaas_checkout_reserva, updated_at")
     .eq("id", vendaId).single();
   if (error || !venda) throw new Error("Venda não encontrada.");
   const atual = venda as VendaCheckout;
@@ -30,8 +28,9 @@ export async function gerarCheckout(vendaId: string) {
     const { data: liberada } = await admin.from("vendas")
       .update({ asaas_checkout_reserva: null })
       .eq("id", vendaId).eq("asaas_checkout_reserva", atual.asaas_checkout_reserva)
-      .select("id").maybeSingle();
+      .select("id, updated_at").maybeSingle();
     if (!liberada) throw new Error("Outra tentativa de checkout já foi iniciada.");
+    atual.updated_at = liberada.updated_at;
   }
   if (!(["nao_monitorado", "expirada", "pendente"].includes(atual.pagamento_status)) ||
       (atual.pagamento_status === "pendente" && atual.asaas_checkout_id)) {
@@ -43,6 +42,7 @@ export async function gerarCheckout(vendaId: string) {
     .update({ asaas_checkout_reserva: reserva })
     .eq("id", vendaId)
     .eq("pagamento_status", atual.pagamento_status)
+    .eq("updated_at", atual.updated_at)
     .is("asaas_checkout_reserva", null);
   claim = atual.asaas_checkout_id
     ? claim.eq("asaas_checkout_id", atual.asaas_checkout_id)
@@ -52,12 +52,19 @@ export async function gerarCheckout(vendaId: string) {
 
   let novoId: string | null = null;
   try {
+    const { data: itens, error: erroItens } = await admin.from("venda_itens")
+      .select("produto_id, produto_nome, preco_unitario")
+      .eq("venda_id", vendaId).order("ordem", { ascending: true });
+    if (erroItens || !itens?.length) throw new Error("A venda não possui produtos vinculados.");
     const checkout = await criarCheckout({
       vendaId,
-      produtoId: atual.produto_id,
-      produtoNome: atual.produto_nome,
       turmaNome: atual.turma_nome,
       valor: Number(atual.valor),
+      itens: itens.map((item) => ({
+        produtoId: item.produto_id,
+        nome: item.produto_nome,
+        preco: Number(item.preco_unitario),
+      })),
     });
     novoId = checkout.id;
     const expiraEm = new Date(Date.now() + 1440 * 60_000).toISOString();

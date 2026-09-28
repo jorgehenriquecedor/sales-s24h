@@ -54,7 +54,7 @@ export default async function PaginaInicio({
 
   // Só oferece como filtro o que realmente aparece em alguma venda.
   const produtosComVenda = produtos.filter((p) =>
-    vendas.some((v) => v.produto_id === p.id),
+    vendas.some((v) => v.itens.some((item) => item.produto_id === p.id)),
   );
   const turmasComVenda = turmas.filter((t) =>
     vendas.some((v) => v.turma_id === t.id),

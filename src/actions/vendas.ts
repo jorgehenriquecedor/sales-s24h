@@ -20,91 +20,89 @@ type CamposVenda = {
   comprador_nome: string;
   comprador_telefone: string;
   comprador_email: string;
-  produto_id: string;
+  produto_ids: string[];
   turma_id: string | null;
-  valor: number;
+  desconto_tipo: "nenhum" | "percentual" | "fixo";
+  desconto_valor: number;
+  desconto_observacao: string | null;
 };
 
 function lerCampos(formData: FormData): CamposVenda {
+  const tipo = String(formData.get("desconto_tipo") ?? "nenhum");
   return {
     comprador_nome: String(formData.get("comprador_nome") ?? "").trim(),
     comprador_telefone: String(formData.get("comprador_telefone") ?? "").trim(),
     comprador_email: String(formData.get("comprador_email") ?? "").trim(),
-    produto_id: String(formData.get("produto_id") ?? ""),
+    produto_ids: formData.getAll("produto_ids").map(String),
     turma_id: String(formData.get("turma_id") ?? "") || null,
-    valor: converterParaNumero(formData.get("valor")),
+    desconto_tipo: tipo as CamposVenda["desconto_tipo"],
+    desconto_valor: tipo === "nenhum" ? 0 : converterParaNumero(formData.get("desconto_valor")),
+    desconto_observacao: String(formData.get("desconto_observacao") ?? "").trim() || null,
   };
 }
 
 function validar(campos: CamposVenda): string | null {
   if (!campos.comprador_nome) return "Informe o nome completo do comprador.";
-  if (!campos.produto_id) return "Selecione o produto.";
-  if (!Number.isFinite(campos.valor)) return "Informe um valor válido.";
-  if (campos.valor <= 0) return "O valor deve ser maior que zero para gerar o checkout.";
+  if (campos.produto_ids.length < 1 || campos.produto_ids.length > 20) return "Selecione entre 1 e 20 produtos.";
+  if (new Set(campos.produto_ids).size !== campos.produto_ids.length) return "Um produto não pode aparecer duas vezes.";
+  if (campos.produto_ids.some((id) => !/^[0-9a-f-]{36}$/i.test(id))) return "Produto inválido.";
+  if (!["nenhum", "percentual", "fixo"].includes(campos.desconto_tipo)) return "Tipo de desconto inválido.";
+  if (!Number.isFinite(campos.desconto_valor) || campos.desconto_valor < 0) return "Informe um desconto válido.";
+  if (campos.desconto_tipo !== "nenhum" && campos.desconto_valor <= 0) return "Informe um desconto maior que zero.";
+  if (campos.desconto_tipo === "percentual" && campos.desconto_valor > 100) return "O desconto percentual não pode passar de 100%.";
+  if ((campos.desconto_observacao?.length ?? 0) > 1000) return "A observação deve ter até 1000 caracteres.";
   return null;
 }
 
-/** Busca os nomes atuais para congelar na venda. */
-async function nomesDeReferencia(produtoId: string, turmaId: string | null) {
-  const supabase = await createClient();
-
-  const produto = await supabase
-    .from("produtos")
-    .select("nome")
-    .eq("id", produtoId)
-    .maybeSingle();
-
-  if (!produto.data) return { erro: "Produto não encontrado." as const };
-  if (!turmaId) return { produto_nome: produto.data.nome, turma_nome: "" };
-
-  const turma = await supabase
-    .from("turmas")
-    .select("nome")
-    .eq("id", turmaId)
-    .maybeSingle();
-
-  if (!turma.data) return { erro: "Turma não encontrada." as const };
-
-  return { produto_nome: produto.data.nome, turma_nome: turma.data.nome };
+function parametros(campos: CamposVenda) {
+  return {
+    p_comprador_nome: campos.comprador_nome,
+    p_comprador_telefone: campos.comprador_telefone,
+    p_comprador_email: campos.comprador_email,
+    p_produto_ids: campos.produto_ids,
+    p_turma_id: campos.turma_id,
+    p_desconto_tipo: campos.desconto_tipo,
+    p_desconto_valor: campos.desconto_valor,
+    p_desconto_observacao: campos.desconto_observacao,
+  };
 }
 
 export async function criarVenda(
   _anterior: ResultadoVenda,
   formData: FormData,
 ): Promise<ResultadoVenda> {
-  if (!asaasConfigurado()) return { erro: "A integração Asaas ainda não foi configurada. Configure as credenciais antes de criar uma venda." };
   const campos = lerCampos(formData);
   const invalido = validar(campos);
   if (invalido) return { erro: invalido };
 
-  const nomes = await nomesDeReferencia(campos.produto_id, campos.turma_id);
-  if ("erro" in nomes) return { erro: nomes.erro };
-
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { erro: "Faça login novamente para criar a venda." };
-  const { data: venda, error } = await supabase.from("vendas").insert({
-    ...campos,
-    produto_nome: nomes.produto_nome,
-    turma_nome: nomes.turma_nome,
-    // O status inicial é garantido pelo trigger no banco.
-  }).select("id").single();
+  const { data: id, error } = await supabase.rpc("criar_venda_com_produtos", parametros(campos));
+  if (error || !id) return { erro: `Não foi possível registrar a venda: ${error?.message ?? "erro desconhecido"}` };
 
-  if (error || !venda) return { erro: `Não foi possível registrar a venda: ${error?.message ?? "erro desconhecido"}` };
+  if (!asaasConfigurado()) {
+    revalidarTudo();
+    return {
+      ok: true,
+      vendaId: id,
+      aviso: "Venda salva sem checkout. A integração Asaas ainda não está configurada; gere o checkout nesta mesma venda depois da ativação.",
+    };
+  }
 
   try {
-    await gerarCheckout(venda.id);
+    await gerarCheckout(id);
   } catch (falha) {
     revalidarTudo();
     return {
       ok: true,
-      vendaId: venda.id,
+      vendaId: id,
       aviso: `Venda salva, mas o checkout não foi criado: ${falha instanceof Error ? falha.message : "erro inesperado"}. Abra a venda e tente novamente.`,
     };
   }
 
   revalidarTudo();
-  return { ok: true, vendaId: venda.id };
+  return { ok: true, vendaId: id };
 }
 
 export async function gerarCheckoutNovamente(
@@ -139,18 +137,11 @@ export async function atualizarVenda(
   const invalido = validar(campos);
   if (invalido) return { erro: invalido };
 
-  const nomes = await nomesDeReferencia(campos.produto_id, campos.turma_id);
-  if ("erro" in nomes) return { erro: nomes.erro };
-
   const supabase = await createClient();
-  const { error } = await supabase
-    .from("vendas")
-    .update({
-      ...campos,
-      produto_nome: nomes.produto_nome,
-      turma_nome: nomes.turma_nome,
-    })
-    .eq("id", id);
+  const { error } = await supabase.rpc("atualizar_venda_com_produtos", {
+    p_id: id,
+    ...parametros(campos),
+  });
 
   if (error) return { erro: `Não foi possível salvar: ${error.message}` };
 

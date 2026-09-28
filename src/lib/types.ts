@@ -16,6 +16,13 @@ export type Turma = {
   created_at: string;
 };
 
+export type ItemVenda = {
+  produto_id: string | null;
+  produto_nome: string;
+  preco_unitario: number;
+  ordem: number;
+};
+
 export type Venda = {
   id: string;
   comprador_nome: string;
@@ -26,6 +33,11 @@ export type Venda = {
   produto_nome: string;
   turma_nome: string;
   valor: number;
+  valor_bruto: number;
+  desconto_tipo: "nenhum" | "percentual" | "fixo";
+  desconto_valor: number;
+  desconto_observacao: string | null;
+  itens: ItemVenda[];
   status: StatusVenda;
   pagamento_status: StatusPagamento;
   asaas_checkout_id: string | null;
@@ -40,4 +52,4 @@ export type Venda = {
 
 /** Colunas selecionadas em toda consulta de venda. */
 export const COLUNAS_VENDA =
-  "id, comprador_nome, comprador_telefone, comprador_email, produto_id, turma_id, produto_nome, turma_nome, valor, status, pagamento_status, asaas_checkout_id, asaas_checkout_url, asaas_checkout_expira_em, asaas_pagamento_id, asaas_comprovante_url, comprovante_path, comprovante_nome, created_at";
+  "id, comprador_nome, comprador_telefone, comprador_email, produto_id, turma_id, produto_nome, turma_nome, valor, valor_bruto, desconto_tipo, desconto_valor, desconto_observacao, itens:venda_itens(produto_id, produto_nome, preco_unitario, ordem), status, pagamento_status, asaas_checkout_id, asaas_checkout_url, asaas_checkout_expira_em, asaas_pagamento_id, asaas_comprovante_url, comprovante_path, comprovante_nome, created_at";

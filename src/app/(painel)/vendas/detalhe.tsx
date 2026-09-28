@@ -37,11 +37,13 @@ export function DetalheVenda({
   venda,
   produtos,
   turmas,
+  asaasAtivo,
   aoFechar,
 }: {
   venda: Venda | null;
   produtos: Produto[];
   turmas: Turma[];
+  asaasAtivo: boolean;
   aoFechar: () => void;
 }) {
   const [modo, setModo] = useState<Modo>("detalhe");
@@ -125,10 +127,29 @@ export function DetalheVenda({
             <Dado rotulo="Comprador" valor={venda.comprador_nome} />
             <Dado rotulo="Telefone" valor={venda.comprador_telefone || "—"} />
             <Dado rotulo="E-mail" valor={venda.comprador_email || "—"} />
-            <Dado rotulo="Produto" valor={venda.produto_nome} />
+            <div>
+              <dt className="rotulo-metrica">Produtos</dt>
+              <dd className="mt-1.5 space-y-1 text-[15px] text-tinta">
+                {venda.itens.map((item) => (
+                  <div key={item.ordem} className="flex justify-between gap-3">
+                    <span>{item.produto_nome}</span>
+                    <span className="shrink-0 tabular-nums">{formatarMoeda(item.preco_unitario)}</span>
+                  </div>
+                ))}
+              </dd>
+            </div>
             <Dado rotulo="Turma" valor={venda.turma_nome} />
+            {venda.desconto_tipo !== "nenhum" && (
+              <>
+                <Dado rotulo="Soma dos produtos" valor={formatarMoeda(venda.valor_bruto)} />
+                <Dado rotulo="Desconto" valor={venda.desconto_tipo === "percentual"
+                  ? `${venda.desconto_valor}% (${formatarMoeda(venda.valor_bruto - venda.valor)})`
+                  : formatarMoeda(venda.desconto_valor)} />
+                {venda.desconto_observacao && <Dado rotulo="Observação" valor={venda.desconto_observacao} />}
+              </>
+            )}
             <Dado
-              rotulo="Valor"
+              rotulo="Valor final"
               valor={formatarMoeda(venda.valor)}
               destaque
             />
@@ -159,10 +180,12 @@ export function DetalheVenda({
             {(venda.pagamento_status === "expirada" ||
               venda.pagamento_status === "nao_monitorado" ||
               (venda.pagamento_status === "pendente" && !venda.asaas_checkout_id)) && (
-              <form action={acaoCheckout}>
-                <input type="hidden" name="id" value={venda.id} />
-                <BotaoEnvio carregando="Gerando…">{venda.pagamento_status === "expirada" ? "Gerar checkout novamente" : "Gerar checkout"}</BotaoEnvio>
-              </form>
+              asaasAtivo ? (
+                <form action={acaoCheckout}>
+                  <input type="hidden" name="id" value={venda.id} />
+                  <BotaoEnvio carregando="Gerando…">{venda.pagamento_status === "expirada" ? "Gerar checkout novamente" : "Gerar checkout"}</BotaoEnvio>
+                </form>
+              ) : <p className="text-sm text-neutro">O checkout estará disponível quando a integração Asaas for configurada.</p>
             )}
             {estadoCheckout.erro && <Aviso>{estadoCheckout.erro}</Aviso>}
           </section>

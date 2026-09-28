@@ -1,11 +1,11 @@
 import "server-only";
+import { distribuirValor } from "./descontos";
 
 export type DadosCheckout = {
   vendaId: string;
-  produtoId: string | null;
-  produtoNome: string;
   turmaNome: string;
   valor: number;
+  itens: { produtoId: string | null; nome: string; preco: number }[];
 };
 
 const BASES = {
@@ -67,6 +67,7 @@ export async function criarCheckout(dados: DadosCheckout) {
   }
   const callback = (estado: string) =>
     `${origem.replace(/\/$/, "")}/pagamento?estado=${estado}`;
+  const valores = distribuirValor(dados.itens.map((item) => item.preco), dados.valor);
   const checkout = await requisicaoAsaas<{ id: string; link?: string | null }>(
     "/checkouts",
     {
@@ -81,15 +82,13 @@ export async function criarCheckout(dados: DadosCheckout) {
           cancelUrl: callback("cancelado"),
           expiredUrl: callback("expirado"),
         },
-        items: [
-          {
-            externalReference: dados.produtoId ?? dados.vendaId,
-            name: dados.produtoNome,
-            description: dados.turmaNome || "Venda Sales-S24H",
-            quantity: 1,
-            value: dados.valor,
-          },
-        ],
+        items: dados.itens.map((item, index) => ({
+          externalReference: item.produtoId ?? dados.vendaId,
+          name: item.nome,
+          description: dados.turmaNome || "Venda Sales-S24H",
+          quantity: 1,
+          value: valores[index],
+        })),
       }),
     },
   );

@@ -1,7 +1,7 @@
 -- =====================================================================
 -- Controle de Vendas — Prova Oral Suporte 24h
--- Script único de provisionamento do banco (idempotente: pode rodar de novo)
--- Cole inteiro no SQL Editor do Supabase e clique em "Run".
+-- Base do banco (idempotente). Execute também os arquivos em migrations/
+-- em ordem para instalar Checkout Asaas, itens e descontos.
 -- =====================================================================
 
 -- ---------------------------------------------------------------------

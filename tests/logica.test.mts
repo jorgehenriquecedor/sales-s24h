@@ -74,7 +74,18 @@ const venda = (o: Partial<Venda>): Venda => ({
   produto_nome: "P",
   turma_nome: "T",
   valor: o.valor ?? 100,
+  valor_bruto: o.valor_bruto ?? o.valor ?? 100,
+  desconto_tipo: o.desconto_tipo ?? "nenhum",
+  desconto_valor: o.desconto_valor ?? 0,
+  desconto_observacao: o.desconto_observacao ?? null,
+  itens: o.itens ?? [{ produto_id: o.produto_id ?? "p1", produto_nome: "P", preco_unitario: o.valor ?? 100, ordem: 1 }],
   status: o.status ?? "comprovante_nao_anexado",
+  pagamento_status: o.pagamento_status ?? "nao_monitorado",
+  asaas_checkout_id: null,
+  asaas_checkout_url: null,
+  asaas_checkout_expira_em: null,
+  asaas_pagamento_id: null,
+  asaas_comprovante_url: null,
   comprovante_path: null,
   comprovante_nome: null,
   created_at: o.created_at ?? "2026-01-15T12:00:00Z",
@@ -96,6 +107,13 @@ t("combina mês + produto + turma", () =>
   assert.deepEqual(aplicarFiltros(base, { periodo: "2026-01", produtos: ["p1"], turmas: ["t1"] }).map(v => v.id), ["1"]));
 t("combinação sem resultado", () =>
   assert.equal(aplicarFiltros(base, { periodo: "2026-02", produtos: ["p2"], turmas: [] }).length, 0));
+t("produto secundário também aparece no filtro", () => {
+  const multi = venda({ id: "multi", produto_id: "p1", itens: [
+    { produto_id: "p1", produto_nome: "P1", preco_unitario: 100, ordem: 1 },
+    { produto_id: "p2", produto_nome: "P2", preco_unitario: 200, ordem: 2 },
+  ] });
+  assert.deepEqual(aplicarFiltros([multi], { periodo: "tudo", produtos: ["p2"], turmas: [] }).map(v => v.id), ["multi"]);
+});
 
 /* ---------- totais ---------- */
 t("totaliza", () => {

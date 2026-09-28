@@ -6,6 +6,8 @@ const suites = [
   ["Exportação de relatório em PDF", "./pdf.test.mts"],
   ["Schema do banco (Postgres real via PGlite)", "./schema.test.mjs"],
   ["Migração e proteção do Checkout Asaas", "./asaas-schema.test.mjs"],
+  ["Itens e descontos da venda", "./venda-itens.test.mjs"],
+  ["Cálculo e rateio do desconto", "./descontos.test.mts"],
 ];
 
 for (const [titulo, arquivo] of suites) {
