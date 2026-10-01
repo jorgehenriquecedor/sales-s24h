@@ -146,6 +146,17 @@ export function aplicarFiltros(vendas: Venda[], filtros: Filtros): Venda[] {
   });
 }
 
+/** Mesma busca na lista e no PDF, inclusive em vendas com vários produtos. */
+export function buscarVendas(vendas: Venda[], busca: string): Venda[] {
+  const termo = busca.trim().toLowerCase();
+  if (!termo) return vendas;
+  return vendas.filter((venda) => [
+    venda.comprador_nome, venda.comprador_email, venda.comprador_telefone,
+    venda.produto_nome, venda.turma_nome,
+    ...(venda.itens ?? []).map((item) => item.produto_nome),
+  ].join(" ").toLowerCase().includes(termo));
+}
+
 export function totalizar(vendas: Venda[]) {
   const total = vendas.reduce((soma, v) => soma + Number(v.valor), 0);
   const pendentes = vendas.filter(

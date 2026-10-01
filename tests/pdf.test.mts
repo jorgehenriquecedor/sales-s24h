@@ -1,138 +1,111 @@
 import assert from "node:assert/strict";
-import { PDFDocument, StandardFonts } from "pdf-lib";
-import { gerarRelatorioPdf, nomeArquivoRelatorio, limparTexto, quebrarTexto } from "../src/lib/pdf.ts";
+import { writeFile } from "node:fs/promises";
+import { PDFArray, PDFDict, PDFDocument, PDFHexString, PDFName, StandardFonts } from "pdf-lib";
+import { gerarRelatorioPdf, linksRelatorio, nomeArquivoRelatorio, limparTexto, quebrarTexto } from "../src/lib/pdf.ts";
+import { buscarVendas } from "../src/lib/filtros.ts";
+import { urlReciboAsaasConfiavel } from "../src/lib/comprovante.ts";
 import type { Venda } from "../src/lib/types.ts";
 
+const v = (ajustes: Partial<Venda> = {}): Venda => ({
+  id: "00000000-0000-4000-8000-000000000001",
+  comprador_nome: "Pessoa de Exemplo", comprador_telefone: "(11) 90000-0000", comprador_email: "exemplo@example.com",
+  produto_id: "p", turma_id: "t", produto_nome: "Curso Presencial + S24H (Suporte 24H)", turma_nome: "TJGO",
+  itens: [{ produto_id: "p", produto_nome: "Curso Presencial", preco_unitario: 3990, ordem: 0 },
+    { produto_id: "p2", produto_nome: "S24H (Suporte 24H)", preco_unitario: 2900, ordem: 1 }],
+  valor: 6890, valor_bruto: 6890, desconto_tipo: "nenhum", desconto_valor: 0, desconto_observacao: null,
+  status: "comprovante_anexado", pagamento_status: "aprovada", modo_venda: "manual",
+  asaas_checkout_id: null, asaas_checkout_url: null, asaas_checkout_expira_em: null,
+  asaas_pagamento_id: null, asaas_comprovante_url: null,
+  comprovante_path: "venda/recibo.pdf", comprovante_nome: "recibo.pdf", created_at: "2026-09-15T12:00:00Z",
+  ...ajustes,
+});
+const recorte = { periodo: "2026-09", produtos: [], turmas: [] };
+const origem = "https://controle-vendas-s24h.vercel.app";
+const gerar = (vendas: Venda[], filtros = recorte) => gerarRelatorioPdf(vendas, filtros, new Date("2026-10-01T15:00:00Z"), { origem });
+const paginas = async (bytes: Uint8Array) => (await PDFDocument.load(bytes)).getPageCount();
 let ok = 0;
-const t = (n: string, f: () => void) => { f(); console.log("✓", n); ok++; };
-const ta = async (n: string, f: () => Promise<void>) => { await f(); console.log("✓", n); ok++; };
+async function teste(nome: string, funcao: () => void | Promise<void>) { await funcao(); console.log("✓", nome); ok++; }
 
-type Ajustes = {
-  id?: string; nome?: string; tel?: string; produto?: string;
-  turma?: string; valor?: number; data?: string;
-};
-
-const v = (o: Ajustes = {}): Venda => ({
-  id: o.id ?? "1",
-  comprador_nome: o.nome ?? "Maria Souza Lima",
-  comprador_telefone: o.tel ?? "(11) 99999-8888",
-  comprador_email: "maria@ex.com",
-  produto_id: "p", turma_id: "t",
-  produto_nome: o.produto ?? "Mentoria Prova Oral",
-  turma_nome: o.turma ?? "Turma Janeiro 2026",
-  valor: o.valor ?? 2997,
-  status: "comprovante_nao_anexado",
-  comprovante_path: null, comprovante_nome: null,
-  created_at: o.data ?? "2026-01-15T12:00:00Z",
-});
-
-const recorte = { periodo: "tudo", produtos: [], turmas: [] };
-const paginas = async (bytes: Uint8Array) =>
-  (await PDFDocument.load(bytes)).getPageCount();
-
-/* ---------- saída é um PDF de verdade ---------- */
-const pdf = await gerarRelatorioPdf([v(), v({ id: "2", valor: 1500 })], recorte);
-
-t("devolve bytes com assinatura de PDF", () => {
+const pdf = await gerar([v(), v({ id: "2", valor: 1500 })]);
+await teste("PDF A4 com resumo e detalhes em páginas separadas", async () => {
   assert.equal(Buffer.from(pdf.slice(0, 5)).toString(), "%PDF-");
-});
-await ta("abre como documento válido, uma página", async () => {
-  assert.equal(await paginas(pdf), 1);
-});
-await ta("tem tamanho de A4 retrato", async () => {
-  const p = (await PDFDocument.load(pdf)).getPage(0).getSize();
-  assert.equal(Math.round(p.width), 595);
-  assert.equal(Math.round(p.height), 842);
+  const doc = await PDFDocument.load(pdf);
+  assert.equal(doc.getPageCount(), 2);
+  assert.equal(Math.round(doc.getPage(0).getWidth()), 595);
+  assert.equal(Math.round(doc.getPage(0).getHeight()), 842);
 });
 
-/* ---------- paginação ---------- */
-// Descobre quantas linhas cabem na primeira página junto com o total, em vez
-// de fixar um número que envelhece a cada ajuste de layout.
-const lote = (n: number) => Array.from({ length: n }, (_, i) => v({ id: String(i) }));
-let cabemNaPrimeira = 0;
-for (let n = 1; n <= 60; n++) {
-  if ((await paginas(await gerarRelatorioPdf(lote(n), recorte))) > 1) break;
-  cabemNaPrimeira = n;
-}
-
-t(`uma página comporta ${cabemNaPrimeira} vendas com o total junto`, () => {
-  assert.ok(cabemNaPrimeira >= 25, `só couberam ${cabemNaPrimeira} linhas por página`);
-});
-await ta("uma venda a mais empurra o total para a página seguinte, sem cortá-lo", async () => {
-  assert.equal(await paginas(await gerarRelatorioPdf(lote(cabemNaPrimeira + 1), recorte)), 2);
-});
-await ta("100 vendas geram várias páginas", async () => {
-  const muitas = Array.from({ length: 100 }, (_, i) => v({ id: String(i) }));
-  const n = await paginas(await gerarRelatorioPdf(muitas, recorte));
-  assert.ok(n >= 3 && n <= 5, `esperava 3 a 5 páginas, veio ${n}`);
-});
-await ta("500 vendas não quebram nem estouram", async () => {
-  const muitas = Array.from({ length: 500 }, (_, i) => v({ id: String(i) }));
-  const n = await paginas(await gerarRelatorioPdf(muitas, recorte));
-  assert.ok(n >= 15, `esperava 15+ páginas, veio ${n}`);
+await teste("anotações clicáveis apontam para cada venda e comprovante, sem URL temporária", async () => {
+  const doc = await PDFDocument.load(pdf);
+  const urls: string[] = [];
+  for (const pagina of doc.getPages()) {
+    const annots = pagina.node.Annots();
+    for (let i = 0; annots && i < annots.size(); i++) {
+      const annot = annots.lookup(i, PDFDict);
+      assert.equal(annot.lookup(PDFName.of("Subtype"), PDFName).toString(), "/Link");
+      const rect = annot.lookup(PDFName.of("Rect"), PDFArray).asArray().map((n) => Number(n.toString()));
+      assert.ok(rect[0] >= 40 && rect[2] < 556 && rect[1] >= 65 && rect[3] <= 742);
+      const action = annot.lookup(PDFName.of("A"), PDFDict);
+      urls.push(action.lookup(PDFName.of("URI"), PDFHexString).decodeText());
+    }
+  }
+  assert.deepEqual(urls, [
+    `${origem}/vendas?venda=${v().id}`, `${origem}/vendas/${v().id}/comprovante`,
+    `${origem}/vendas?venda=2`, `${origem}/vendas/2/comprovante`,
+  ]);
+  assert.ok(urls.every((url) => !url.includes("token=")));
 });
 
-/* ---------- casos de borda ---------- */
-await ta("lista vazia gera uma página com o bloco de total", async () => {
-  assert.equal(await paginas(await gerarRelatorioPdf([], recorte)), 1);
+await teste("sem arquivo e sem recibo não inventa link; recibo Asaas usa rota permanente", () => {
+  assert.equal(linksRelatorio(v({ comprovante_path: null }), origem).comprovante, null);
+  assert.equal(linksRelatorio(v({ comprovante_path: null, asaas_comprovante_url: "https://www.asaas.com/comprovantes/123" }), origem).comprovante,
+    `${origem}/vendas/${v().id}/comprovante`);
+  assert.equal(linksRelatorio(v()).venda, null);
+  assert.throws(() => linksRelatorio(v(), "javascript:alert(1)"));
 });
-await ta("recorte com filtros nomeados não quebra", async () => {
-  const bytes = await gerarRelatorioPdf([v()], {
-    periodo: "2026-09",
-    produtos: ["Curso Online S24h", "Mentoria Prova Oral"],
-    turmas: ["MPBA"],
-  });
-  assert.equal(await paginas(bytes), 1);
+await teste("redirecionamento de recibos externos aceita apenas HTTPS do Asaas", () => {
+  assert.ok(urlReciboAsaasConfiavel("https://www.asaas.com/comprovantes/123"));
+  for (const url of [null, "javascript:alert(1)", "https://asaas.com.evil.example/recibo", "http://asaas.com/recibo", "https://usuario@asaas.com/recibo"]) {
+    assert.equal(urlReciboAsaasConfiavel(url), false);
+  }
 });
-await ta("nome gigante do comprador é truncado sem estourar a coluna", async () => {
-  const bytes = await gerarRelatorioPdf(
-    [v({ nome: "Maria ".repeat(40) })],
-    recorte,
-  );
-  assert.equal(await paginas(bytes), 1);
+await teste("busca do PDF e da lista inclui produtos individuais e dados do comprador", () => {
+  const vendas = [v({ produto_nome: "Pacote", itens: [{ produto_id: "p", produto_nome: "Mentoria Especial", preco_unitario: 99, ordem: 0 }] }), v({ id: "2", comprador_nome: "Outro cliente", itens: [] })];
+  assert.deepEqual(buscarVendas(vendas, " mentoria especial ").map((v) => v.id), [v().id]);
+  assert.deepEqual(buscarVendas(vendas, "OUTRO CLIENTE").map((v) => v.id), ["2"]);
 });
-await ta("nomes dos produtos cabem em várias linhas sem reticências", async () => {
+await teste("relatório vazio é válido e cabe em uma página", async () => {
+  assert.equal(await paginas(await gerar([])), 1);
+});
+await teste("grandes volumes paginam resumo e todas as fichas", async () => {
+  const vendas = Array.from({ length: 100 }, (_, i) => v({ id: String(i) }));
+  const doc = await PDFDocument.load(await gerar(vendas));
+  assert.ok(doc.getPageCount() > 2);
+  assert.equal(doc.getPages().reduce((soma, pagina) => soma + (pagina.node.Annots()?.size() ?? 0), 0), 200);
+});
+await teste("textos extensos e produtos completos continuam em outras páginas", async () => {
   const doc = await PDFDocument.create();
   const fonte = await doc.embedFont(StandardFonts.Helvetica);
   const produto = "Curso Presencial + S24H (Suporte 24H)";
-  const linhas = quebrarTexto(produto, fonte, 8.5, 116);
-  assert.ok(linhas.length > 1);
-  assert.equal(linhas.join(" "), produto);
-  assert.ok(linhas.every((linha) => fonte.widthOfTextAtSize(linha, 8.5) <= 116));
-  assert.equal(await paginas(await gerarRelatorioPdf([v({ produto })], recorte)), 1);
+  assert.equal(quebrarTexto(produto, fonte, 9, 116).join(" "), produto);
+  const bytes = await gerar([v({ comprador_nome: "Nome ".repeat(150), itens: [], produto_nome: produto.repeat(150) })]);
+  assert.ok(await paginas(bytes) > 2);
 });
-await ta("produto longo pode continuar em outra página sem cortar o relatório", async () => {
-  const produto = "Curso Presencial + S24H (Suporte 24H) ".repeat(100);
-  const bytes = await gerarRelatorioPdf([v({ produto })], recorte);
-  assert.ok(await paginas(bytes) >= 2);
-});
-await ta("emoji e caracteres fora do latim não derrubam a exportação", async () => {
-  const bytes = await gerarRelatorioPdf(
-    [v({ nome: "Maria 🎉 Souza 中文 Lima", produto: "Curso ✨" })],
-    recorte,
-  );
-  assert.equal(await paginas(bytes), 1);
-});
-await ta("telefone vazio vira travessão", async () => {
-  assert.equal(await paginas(await gerarRelatorioPdf([v({ tel: "" })], recorte)), 1);
-});
-
-/* ---------- limpeza de texto ---------- */
-t("mantém todos os acentos do português", () => {
+await teste("acentos, emojis e espaços não impedem a exportação", async () => {
   assert.equal(limparTexto("João Conceição Ângela Ruíz Türk ÇÃO"), "João Conceição Ângela Ruíz Türk ÇÃO");
+  assert.equal(limparTexto("Maria 🎉 中文\n\t Souza"), "Maria Souza");
+  assert.equal(await paginas(await gerar([v({ comprador_nome: "Pessoa 🎉 中文", comprador_telefone: "" })])), 2);
 });
-t("remove emoji e alfabetos não latinos sem deixar buraco de espaços", () => {
-  assert.equal(limparTexto("Maria 🎉 中文 Souza"), "Maria Souza");
-});
-t("colapsa quebras de linha e espaços duplos", () => {
-  assert.equal(limparTexto("Maria\n\tSouza   Lima"), "Maria Souza Lima");
-});
-
-/* ---------- nome do arquivo ---------- */
-t("nome do arquivo por período", () => {
-  const hoje = new Date("2026-09-09T10:00:00Z");
-  assert.equal(nomeArquivoRelatorio("tudo", hoje), "relatorio-vendas-completo-2026-09-09.pdf");
-  assert.equal(nomeArquivoRelatorio("2026-03", hoje), "relatorio-vendas-marco-2026-2026-09-09.pdf");
+await teste("nome do arquivo acompanha o período", () => {
+  const data = new Date("2026-10-01T15:00:00Z");
+  assert.equal(nomeArquivoRelatorio("tudo", data), "relatorio-vendas-completo-2026-10-01.pdf");
+  assert.equal(nomeArquivoRelatorio("2026-03", data), "relatorio-vendas-marco-2026-2026-10-01.pdf");
 });
 
+if (process.env.PDF_PREVIEW_PATH) {
+  const exemplos = [v(), v({ id: "2", comprador_nome: "Cliente Exemplo com Desconto", valor: 6201, desconto_tipo: "percentual", desconto_valor: 10, desconto_observacao: "Desconto combinado para matrícula em dois produtos." }),
+    v({ id: "3", comprador_nome: "Cliente Exemplo Asaas", modo_venda: "checkout", comprovante_path: null, asaas_comprovante_url: "https://www.asaas.com/comprovantes/123", asaas_pagamento_id: "pay_exemplo" }),
+    v({ id: "4", comprador_nome: "Cliente Exemplo sem Comprovante", comprovante_path: null })];
+  await writeFile(process.env.PDF_PREVIEW_PATH, await gerar(exemplos));
+}
 console.log(`\n${ok} testes de PDF passaram.`);

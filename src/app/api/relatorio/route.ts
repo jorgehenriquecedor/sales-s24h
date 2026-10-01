@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { listarProdutos, listarTurmas, listarVendas } from "@/lib/dados";
-import { aplicarFiltros, lerFiltros } from "@/lib/filtros";
+import { aplicarFiltros, buscarVendas, lerFiltros } from "@/lib/filtros";
 import { gerarRelatorioPdf, nomeArquivoRelatorio } from "@/lib/pdf";
 
 export const dynamic = "force-dynamic";
@@ -32,7 +32,8 @@ export async function GET(request: NextRequest) {
     listarTurmas(),
   ]);
 
-  const vendas = aplicarFiltros(todasVendas, filtros)
+  const busca = request.nextUrl.searchParams.get("busca")?.trim() ?? "";
+  const vendas = buscarVendas(aplicarFiltros(todasVendas, filtros), busca)
     .filter((venda) => venda.pagamento_status === "aprovada");
 
   // Nomes, e não ids, para o cabeçalho do relatório dizer o recorte por extenso.
@@ -43,7 +44,8 @@ export async function GET(request: NextRequest) {
     periodo: filtros.periodo,
     produtos: nomesDe(produtos, filtros.produtos),
     turmas: nomesDe(turmas, filtros.turmas),
-  });
+    busca,
+  }, new Date(), { origem: request.nextUrl.origin });
 
   return new NextResponse(pdf as BodyInit, {
     headers: {

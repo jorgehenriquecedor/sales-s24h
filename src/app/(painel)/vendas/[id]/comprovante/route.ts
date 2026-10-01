@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { urlReciboAsaasConfiavel } from "@/lib/comprovante";
 
 /**
  * Redireciona para uma URL assinada e temporária do comprovante.
@@ -24,11 +25,11 @@ export async function GET(
 
   const { data: venda, error } = await supabase
     .from("vendas")
-    .select("comprovante_path, comprovante_nome, comprador_nome")
+    .select("comprovante_path, comprovante_nome, comprador_nome, asaas_comprovante_url")
     .eq("id", id)
     .maybeSingle();
 
-  if (error || !venda?.comprovante_path) {
+  if (error || !venda) {
     return NextResponse.json(
       { erro: "Comprovante não encontrado." },
       { status: 404 },
@@ -36,6 +37,17 @@ export async function GET(
   }
 
   const baixar = request.nextUrl.searchParams.get("download") === "1";
+
+  // O endereço permanente também atende os recibos fornecidos como página
+  // pelo Asaas, após autenticação e consulta com as permissões do usuário.
+  if (!venda.comprovante_path) {
+    if (urlReciboAsaasConfiavel(venda.asaas_comprovante_url)) {
+      return NextResponse.redirect(venda.asaas_comprovante_url!, {
+        headers: { "Cache-Control": "private, no-store" },
+      });
+    }
+    return NextResponse.json({ erro: "Comprovante não encontrado." }, { status: 404 });
+  }
 
   const { data, error: erroUrl } = await supabase.storage
     .from("comprovantes")
@@ -54,5 +66,7 @@ export async function GET(
     );
   }
 
-  return NextResponse.redirect(data.signedUrl);
+  return NextResponse.redirect(data.signedUrl, {
+    headers: { "Cache-Control": "private, no-store" },
+  });
 }

@@ -3,7 +3,7 @@
 import { useActionState, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { criarVenda, type ResultadoVenda } from "@/actions/vendas";
-import { IconeMais, IconeVazio } from "@/components/icones";
+import { IconeBaixar, IconeMais, IconeVazio } from "@/components/icones";
 import { Modal } from "@/components/modal";
 import { FiltrosPainel } from "@/components/filtros-painel";
 import {
@@ -16,7 +16,7 @@ import {
   EtiquetaStatus,
   Aviso,
 } from "@/components/ui";
-import { aplicarFiltros, mesesDisponiveis, type Filtros, type StatusFiltro } from "@/lib/filtros";
+import { aplicarFiltros, buscarVendas, mesesDisponiveis, montarQuery, type Filtros, type StatusFiltro } from "@/lib/filtros";
 import { formatarData, formatarMoeda } from "@/lib/format";
 import type { Produto, Turma, Venda } from "@/lib/types";
 import { FormularioVenda } from "./formulario-venda";
@@ -33,6 +33,7 @@ export function ListaVendas({
   filtros,
   status,
   asaasAtivo,
+  vendaInicialId,
 }: {
   vendas: Venda[];
   produtos: Produto[];
@@ -40,9 +41,10 @@ export function ListaVendas({
   filtros: Filtros;
   status: StatusFiltro;
   asaasAtivo: boolean;
+  vendaInicialId: string | null;
 }) {
   const [modoNova, setModoNova] = useState<ModoNova>(null);
-  const [abertaId, setAbertaId] = useState<string | null>(null);
+  const [abertaId, setAbertaId] = useState<string | null>(vendaInicialId);
   const [busca, setBusca] = useState("");
   const [aviso, setAviso] = useState<string | null>(null);
   const router = useRouter();
@@ -62,9 +64,7 @@ export function ListaVendas({
     : null;
 
   const visiveis = useMemo(() => {
-    const termo = busca.trim().toLowerCase();
-
-    return aplicarFiltros(vendas, filtros).filter((venda) => {
+    return buscarVendas(aplicarFiltros(vendas, filtros), busca).filter((venda) => {
       if (status === "pendentes" && venda.pagamento_status !== "pendente") {
         return false;
       }
@@ -74,18 +74,7 @@ export function ListaVendas({
       if (status === "aprovadas" && venda.pagamento_status !== "aprovada") {
         return false;
       }
-      if (!termo) return true;
-
-      return [
-        venda.comprador_nome,
-        venda.comprador_email,
-        venda.comprador_telefone,
-        venda.produto_nome,
-        venda.turma_nome,
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(termo);
+      return true;
     });
   }, [vendas, filtros, status, busca]);
 
@@ -100,6 +89,8 @@ export function ListaVendas({
   );
 
   const semCadastros = produtos.length === 0;
+  const parametrosRelatorio = new URLSearchParams(montarQuery(filtros).slice(1));
+  if (busca.trim()) parametrosRelatorio.set("busca", busca.trim());
 
   return (
     <div className="space-y-5">
@@ -115,7 +106,14 @@ export function ListaVendas({
           turmas={turmasComVenda}
         />
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {visiveis.some((venda) => venda.pagamento_status === "aprovada") && (
+            <a href={`/api/relatorio?${parametrosRelatorio.toString()}`}
+              className="inline-flex items-center justify-center gap-2 rounded-full border border-borda-forte bg-white px-4 py-2 text-sm font-medium text-tinta shadow-sm transition-colors hover:bg-papel">
+              <IconeBaixar className="h-4 w-4" />
+              Exportar aprovadas
+            </a>
+          )}
           <Campo
             type="search"
             value={busca}

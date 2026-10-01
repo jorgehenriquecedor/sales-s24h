@@ -1,618 +1,203 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import {
-  PDFDocument,
-  StandardFonts,
-  rgb,
-  type PDFFont,
-  type PDFImage,
-  type PDFPage,
-  type RGB,
-} from "pdf-lib";
+import { PDFDocument, PDFHexString, StandardFonts, rgb, type PDFFont } from "pdf-lib";
 import type { Venda } from "./types";
 import { rotularMes } from "./filtros";
+import { formatarData, formatarMoeda } from "./format";
 
-/* ------------------------------------------------------------------ */
-/* Paleta — os mesmos hexadecimais do painel (src/app/globals.css)      */
-/* ------------------------------------------------------------------ */
-
-function cor(hex: string): RGB {
-  const n = parseInt(hex.slice(1), 16);
-  return rgb(((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255);
-}
-
-const NAVY = cor("#0f1626");
-const BRASA = cor("#d40c1b");
-const TINTA = cor("#101828");
-const NEUTRO = cor("#667085");
-const BORDA = cor("#e6e8ee");
-const PAPEL = cor("#f7f8fb");
-const BRANCO = cor("#ffffff");
-
-/* ------------------------------------------------------------------ */
-/* Medidas                                                             */
-/* ------------------------------------------------------------------ */
-
-const PAGINA = { largura: 595.28, altura: 841.89 }; // A4 retrato
-const MARGEM = 40;
-const CONTEUDO = PAGINA.largura - MARGEM * 2;
-
-const FAIXA_CAPA = 80;
-const FAIXA_SEGUINTE = 46;
-const ALTURA_LINHA = 19;
-const ALTURA_CABECALHO_TABELA = 20;
-const ALTURA_TOTAL = 56;
-const PISO = 66; // espaço reservado para o rodapé
-
-type Alinhamento = "esquerda" | "direita";
-
-const COLUNAS: {
-  rotulo: string;
-  largura: number;
-  alinhamento: Alinhamento;
-  valor: (v: Venda) => string;
-}[] = [
-  { rotulo: "Comprador", largura: 132, alinhamento: "esquerda", valor: (v) => v.comprador_nome },
-  { rotulo: "Telefone", largura: 87, alinhamento: "esquerda", valor: (v) => v.comprador_telefone || "—" },
-  { rotulo: "Produto", largura: 132, alinhamento: "esquerda", valor: (v) => v.itens?.length
-    ? v.itens.map((item) => item.produto_nome).join(" + ") : v.produto_nome },
-  { rotulo: "Turma", largura: 84, alinhamento: "esquerda", valor: (v) => v.turma_nome },
-  { rotulo: "Valor", largura: 80, alinhamento: "direita", valor: (v) => moeda(v.valor) },
-];
-
-/* ------------------------------------------------------------------ */
-/* Texto                                                               */
-/* ------------------------------------------------------------------ */
-
-/**
- * As fontes padrão do PDF usam WinAnsi, que cobre todo o português mas não
- * emoji nem alfabetos fora do latim. Como o nome do comprador é digitado à
- * mão, o que não for representável sai fora — senão a exportação inteira
- * quebraria por causa de um caractere.
- */
-const NAO_REPRESENTAVEL =
-  /[^\x20-\x7E\xA0-\xFF‘’“”–—•…€™]/g;
+const LARGURA = 595.28, ALTURA = 841.89, MARGEM = 40;
+const CONTEUDO = LARGURA - 2 * MARGEM, TOPO = ALTURA - 100, PISO = 65;
+const NAVY = rgb(0.06, 0.09, 0.15), VERMELHO = rgb(0.83, 0.05, 0.11);
+const TINTA = NAVY, NEUTRO = rgb(0.36, 0.41, 0.49), AZUL = rgb(0.09, 0.31, 0.64);
+const PAPEL = rgb(0.95, 0.96, 0.98), BRANCO = rgb(1, 1, 1);
 
 export function limparTexto(bruto: string): string {
-  // A ordem importa: primeiro toda quebra de linha e tabulação vira espaço
-  // (senão elas seriam apagadas junto com o resto e colariam as palavras),
-  // depois cai o que a fonte não representa, e só então os espaços que
-  // sobraram no lugar do que saiu são colapsados.
-  return bruto
-    .normalize("NFC")
-    .replace(/\s/g, " ")
-    .replace(NAO_REPRESENTAVEL, "")
-    .replace(/ +/g, " ")
-    .trim();
+  return bruto.normalize("NFC").replace(/\s/g, " ")
+    .replace(/[^\x20-\x7E\xA0-\xFF‘’“”–—•…€™]/g, "")
+    .replace(/ +/g, " ").trim();
 }
 
-const MOEDA = new Intl.NumberFormat("pt-BR", {
-  style: "currency",
-  currency: "BRL",
-});
-
-function moeda(valor: number): string {
-  return MOEDA.format(Number.isFinite(valor) ? valor : 0);
-}
-
-const DATA_HORA = new Intl.DateTimeFormat("pt-BR", {
-  day: "2-digit",
-  month: "2-digit",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-  timeZone: "America/Sao_Paulo",
-});
-
-/** Corta com reticências quando não cabe na largura da coluna. */
-function caber(texto: string, fonte: PDFFont, tamanho: number, largura: number): string {
-  if (fonte.widthOfTextAtSize(texto, tamanho) <= largura) return texto;
-
-  let corte = texto;
-  while (corte.length > 1 && fonte.widthOfTextAtSize(`${corte}…`, tamanho) > largura) {
-    corte = corte.slice(0, -1);
-  }
-  return `${corte}…`;
-}
-
-/** Quebra o texto pela largura real da fonte, sem descartar nenhum produto. */
-export function quebrarTexto(
-  bruto: string, fonte: PDFFont, tamanho: number, largura: number,
-): string[] {
+/** Quebra pela largura da fonte, preservando inclusive palavras muito longas. */
+export function quebrarTexto(bruto: string, fonte: PDFFont, tamanho: number, largura: number): string[] {
   const texto = limparTexto(bruto);
   if (!texto) return [""];
   const linhas: string[] = [];
   let atual = "";
   for (const palavra of texto.split(" ")) {
     const candidata = atual ? `${atual} ${palavra}` : palavra;
-    if (fonte.widthOfTextAtSize(candidata, tamanho) <= largura) {
-      atual = candidata;
-      continue;
-    }
+    if (fonte.widthOfTextAtSize(candidata, tamanho) <= largura) { atual = candidata; continue; }
     if (atual) linhas.push(atual);
     atual = "";
-    for (const letra of Array.from(palavra)) {
+    for (const letra of palavra) {
       if (atual && fonte.widthOfTextAtSize(atual + letra, tamanho) > largura) {
-        linhas.push(atual);
-        atual = letra;
-      } else {
-        atual += letra;
-      }
+        linhas.push(atual); atual = letra;
+      } else atual += letra;
     }
   }
   if (atual) linhas.push(atual);
   return linhas;
 }
 
-type OpcoesTexto = {
-  x: number;
-  y: number;
-  fonte: PDFFont;
-  tamanho: number;
-  cor: RGB;
-  largura?: number;
-  alinhamento?: Alinhamento;
-  opacidade?: number;
-};
+export type RecorteRelatorio = { periodo: string; produtos: string[]; turmas: string[]; busca?: string };
+export type OpcoesRelatorio = { origem?: string };
 
-function escrever(pagina: PDFPage, bruto: string, o: OpcoesTexto) {
-  const texto = o.largura
-    ? caber(limparTexto(bruto), o.fonte, o.tamanho, o.largura)
-    : limparTexto(bruto);
-
-  const x =
-    o.alinhamento === "direita" && o.largura
-      ? o.x + o.largura - o.fonte.widthOfTextAtSize(texto, o.tamanho)
-      : o.x;
-
-  pagina.drawText(texto, {
-    x,
-    y: o.y,
-    size: o.tamanho,
-    font: o.fonte,
-    color: o.cor,
-    opacity: o.opacidade,
-  });
-}
-
-/* ------------------------------------------------------------------ */
-/* Documento                                                           */
-/* ------------------------------------------------------------------ */
-
-type Fontes = {
-  corpo: PDFFont;
-  corpoForte: PDFFont;
-  titulo: PDFFont;
-};
-
-export type RecorteRelatorio = {
-  periodo: string;
-  produtos: string[];
-  turmas: string[];
-};
-
-function faixaCapa(
-  pagina: PDFPage,
-  fontes: Fontes,
-  geradoEm: Date,
-  logo: PDFImage,
-): number {
-  const topo = PAGINA.altura;
-
-  pagina.drawRectangle({
-    x: 0,
-    y: topo - FAIXA_CAPA,
-    width: PAGINA.largura,
-    height: FAIXA_CAPA,
-    color: NAVY,
-  });
-
-  // Fio vermelho na base da faixa, o mesmo destaque do painel.
-  pagina.drawRectangle({
-    x: 0,
-    y: topo - FAIXA_CAPA,
-    width: PAGINA.largura,
-    height: 3,
-    color: BRASA,
-  });
-
-  pagina.drawImage(logo, {
-    x: MARGEM - 6,
-    y: topo - 60,
-    width: 36,
-    height: 47,
-  });
-
-  escrever(pagina, "Prova Oral", {
-    x: MARGEM + 34,
-    y: topo - 38,
-    fonte: fontes.corpoForte,
-    tamanho: 13,
-    cor: BRANCO,
-  });
-  escrever(pagina, "SUPORTE 24H", {
-    x: MARGEM + 34,
-    y: topo - 50,
-    fonte: fontes.corpo,
-    tamanho: 7,
-    cor: BRANCO,
-    opacidade: 0.62,
-  });
-
-  escrever(pagina, "Relatório de vendas", {
-    x: MARGEM,
-    y: topo - 40,
-    fonte: fontes.titulo,
-    tamanho: 21,
-    cor: BRANCO,
-    largura: CONTEUDO,
-    alinhamento: "direita",
-  });
-  escrever(pagina, `Emitido em ${DATA_HORA.format(geradoEm)}`, {
-    x: MARGEM,
-    y: topo - 54,
-    fonte: fontes.corpo,
-    tamanho: 8,
-    cor: BRANCO,
-    opacidade: 0.62,
-    largura: CONTEUDO,
-    alinhamento: "direita",
-  });
-
-  return topo - FAIXA_CAPA;
-}
-
-function faixaContinuacao(pagina: PDFPage, fontes: Fontes): number {
-  const topo = PAGINA.altura;
-
-  pagina.drawRectangle({
-    x: 0,
-    y: topo - FAIXA_SEGUINTE,
-    width: PAGINA.largura,
-    height: FAIXA_SEGUINTE,
-    color: NAVY,
-  });
-  pagina.drawRectangle({
-    x: 0,
-    y: topo - FAIXA_SEGUINTE,
-    width: PAGINA.largura,
-    height: 2,
-    color: BRASA,
-  });
-
-  escrever(pagina, "Relatório de vendas", {
-    x: MARGEM,
-    y: topo - 29,
-    fonte: fontes.titulo,
-    tamanho: 12,
-    cor: BRANCO,
-  });
-  escrever(pagina, "continuação", {
-    x: MARGEM,
-    y: topo - 29,
-    fonte: fontes.corpo,
-    tamanho: 8,
-    cor: BRANCO,
-    opacidade: 0.55,
-    largura: CONTEUDO,
-    alinhamento: "direita",
-  });
-
-  return topo - FAIXA_SEGUINTE;
-}
-
-/** Bloco que diz, em três campos, qual recorte gerou este relatório. */
-function blocoRecorte(
-  pagina: PDFPage,
-  fontes: Fontes,
-  recorte: RecorteRelatorio,
-  y: number,
-): number {
-  const campos = [
-    {
-      rotulo: "PERÍODO",
-      valor: recorte.periodo === "tudo" ? "Todo o período" : rotularMes(recorte.periodo),
-    },
-    {
-      rotulo: "PRODUTOS",
-      valor: recorte.produtos.length > 0 ? recorte.produtos.join(", ") : "Todos",
-    },
-    {
-      rotulo: "TURMAS",
-      valor: recorte.turmas.length > 0 ? recorte.turmas.join(", ") : "Todas",
-    },
-  ];
-
-  const larguras = [130, 220, 165]; // período, produtos, turmas
-  const topo = y - 26;
-
-  campos.forEach((campo, i) => {
-    const x = MARGEM + larguras.slice(0, i).reduce((a, b) => a + b, 0);
-    const larguraCampo = larguras[i];
-    escrever(pagina, campo.rotulo, {
-      x,
-      y: topo,
-      fonte: fontes.corpoForte,
-      tamanho: 7,
-      cor: NEUTRO,
-    });
-    escrever(pagina, campo.valor, {
-      x,
-      y: topo - 13,
-      fonte: fontes.corpo,
-      tamanho: 9.5,
-      cor: TINTA,
-      largura: larguraCampo - 12,
-    });
-  });
-
-  return topo - 28;
-}
-
-function cabecalhoTabela(pagina: PDFPage, fontes: Fontes, y: number): number {
-  pagina.drawRectangle({
-    x: MARGEM,
-    y: y - ALTURA_CABECALHO_TABELA,
-    width: CONTEUDO,
-    height: ALTURA_CABECALHO_TABELA,
-    color: PAPEL,
-  });
-  pagina.drawRectangle({
-    x: MARGEM,
-    y: y - ALTURA_CABECALHO_TABELA,
-    width: CONTEUDO,
-    height: 1,
-    color: BRASA,
-  });
-
-  let x = MARGEM;
-  for (const coluna of COLUNAS) {
-    escrever(pagina, coluna.rotulo.toUpperCase(), {
-      x: x + 8,
-      y: y - 13.5,
-      fonte: fontes.corpoForte,
-      tamanho: 7,
-      cor: NEUTRO,
-      largura: coluna.largura - 16,
-      alinhamento: coluna.alinhamento,
-    });
-    x += coluna.largura;
+/** URLs permanentes do painel. Nunca grava URLs assinadas com prazo no PDF. */
+export function linksRelatorio(venda: Venda, origem?: string) {
+  if (!origem) return { venda: null, comprovante: null };
+  const base = new URL(origem);
+  if (!["https:", "http:"].includes(base.protocol) || base.username || base.password) {
+    throw new Error("Origem inválida para os links do relatório.");
   }
-
-  return y - ALTURA_CABECALHO_TABELA;
+  const detalhe = new URL("/vendas", base.origin);
+  detalhe.searchParams.set("venda", venda.id);
+  return {
+    venda: detalhe.href,
+    comprovante: venda.comprovante_path || venda.asaas_comprovante_url
+      ? new URL(`/vendas/${encodeURIComponent(venda.id)}/comprovante`, base.origin).href : null,
+  };
 }
 
-function linhaVenda(
-  pagina: PDFPage,
-  fontes: Fontes,
-  venda: Venda,
-  y: number,
-  par: boolean,
-  linhasProduto: string[],
-  continuacao: boolean,
-) {
-  const altura = Math.max(ALTURA_LINHA, 8 + linhasProduto.length * 11);
-  if (par) {
-    pagina.drawRectangle({
-      x: MARGEM,
-      y: y - altura,
-      width: CONTEUDO,
-      height: altura,
-      color: PAPEL,
-    });
-  }
+const DATA_HORA = new Intl.DateTimeFormat("pt-BR", {
+  dateStyle: "short", timeStyle: "short", timeZone: "America/Cuiaba",
+});
 
-  let x = MARGEM;
-  for (const [i, coluna] of COLUNAS.entries()) {
-    if (i === 2) {
-      linhasProduto.forEach((linha, indice) => escrever(pagina, linha, {
-        x: x + 8,
-        y: y - 13 - indice * 11,
-        fonte: fontes.corpo,
-        tamanho: 8.5,
-        cor: TINTA,
-      }));
-      x += coluna.largura;
-      continue;
-    }
-    if (continuacao && i !== 0) {
-      x += coluna.largura;
-      continue;
-    }
-    const destaque = i === 0 || coluna.alinhamento === "direita";
-    escrever(pagina, continuacao ? `${venda.comprador_nome} (cont.)` : coluna.valor(venda), {
-      x: x + 8,
-      y: y - 13,
-      fonte: destaque ? fontes.corpoForte : fontes.corpo,
-      tamanho: 8.5,
-      cor: i === 1 || i === 3 ? NEUTRO : TINTA,
-      largura: coluna.largura - 16,
-      alinhamento: coluna.alinhamento,
-    });
-    x += coluna.largura;
-  }
-  return altura;
-}
-
-function blocoTotal(
-  pagina: PDFPage,
-  fontes: Fontes,
-  total: number,
-  quantidade: number,
-  y: number,
-) {
-  const topo = y - ALTURA_TOTAL;
-
-  pagina.drawRectangle({
-    x: MARGEM,
-    y: topo,
-    width: CONTEUDO,
-    height: ALTURA_TOTAL,
-    color: NAVY,
-  });
-  pagina.drawRectangle({
-    x: MARGEM,
-    y: topo,
-    width: 4,
-    height: ALTURA_TOTAL,
-    color: BRASA,
-  });
-
-  escrever(pagina, "TOTAL DO RECORTE", {
-    x: MARGEM + 18,
-    y: y - 22,
-    fonte: fontes.corpoForte,
-    tamanho: 7.5,
-    cor: BRANCO,
-    opacidade: 0.6,
-  });
-  escrever(pagina, `${quantidade} ${quantidade === 1 ? "venda" : "vendas"}`, {
-    x: MARGEM + 18,
-    y: y - 38,
-    fonte: fontes.corpo,
-    tamanho: 10,
-    cor: BRANCO,
-    opacidade: 0.85,
-  });
-
-  escrever(pagina, moeda(total), {
-    x: MARGEM,
-    y: y - 38,
-    fonte: fontes.titulo,
-    tamanho: 22,
-    cor: BRANCO,
-    largura: CONTEUDO - 18,
-    alinhamento: "direita",
-  });
-}
-
-function rodapes(paginas: PDFPage[], fontes: Fontes) {
-  paginas.forEach((pagina, i) => {
-    pagina.drawRectangle({
-      x: MARGEM,
-      y: 50,
-      width: CONTEUDO,
-      height: 0.7,
-      color: BORDA,
-    });
-
-    escrever(pagina, "Controle de Vendas — Prova Oral Suporte 24h", {
-      x: MARGEM,
-      y: 38,
-      fonte: fontes.corpo,
-      tamanho: 7.5,
-      cor: NEUTRO,
-    });
-    escrever(pagina, `Página ${i + 1} de ${paginas.length}`, {
-      x: MARGEM,
-      y: 38,
-      fonte: fontes.corpo,
-      tamanho: 7.5,
-      cor: NEUTRO,
-      largura: CONTEUDO,
-      alinhamento: "direita",
-    });
-  });
-}
-
-/* ------------------------------------------------------------------ */
-/* Montagem                                                            */
-/* ------------------------------------------------------------------ */
-
-/**
- * Relatório em PDF paginado: uma linha compacta por venda e o total do
- * recorte fechando o documento. Usa a logo oficial no cabeçalho da capa.
- */
+/** Resumo cronológico, seguido de fichas completas com links clicáveis. */
 export async function gerarRelatorioPdf(
-  vendas: Venda[],
-  recorte: RecorteRelatorio,
-  geradoEm: Date = new Date(),
+  vendas: Venda[], recorte: RecorteRelatorio, geradoEm = new Date(), opcoes: OpcoesRelatorio = {},
 ): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
+  const corpo = await doc.embedFont(StandardFonts.Helvetica);
+  const forte = await doc.embedFont(StandardFonts.HelveticaBold);
   const logo = await doc.embedPng(await readFile(join(process.cwd(), "public", "logo.png")));
-
-  const fontes: Fontes = {
-    corpo: await doc.embedFont(StandardFonts.Helvetica),
-    corpoForte: await doc.embedFont(StandardFonts.HelveticaBold),
-    titulo: await doc.embedFont(StandardFonts.TimesRomanBold),
-  };
-
-  doc.setTitle("Relatório de vendas");
-  doc.setProducer("Controle de Vendas — Prova Oral Suporte 24h");
+  doc.setTitle("Relatório de vendas - Prova Oral Suporte 24H");
+  doc.setProducer("Sales S24H");
   doc.setCreationDate(geradoEm);
+  let pagina = doc.addPage([LARGURA, ALTURA]);
+  let y = TOPO;
 
-  const paginas: PDFPage[] = [];
-
-  function novaPagina(capa: boolean): number {
-    const pagina = doc.addPage([PAGINA.largura, PAGINA.altura]);
-    paginas.push(pagina);
-    return capa
-      ? blocoRecorte(pagina, fontes, recorte, faixaCapa(pagina, fontes, geradoEm, logo))
-      : faixaContinuacao(pagina, fontes) - 18;
+  function novaPagina() { pagina = doc.addPage([LARGURA, ALTURA]); y = TOPO; }
+  function reservar(altura: number) { if (y - altura < PISO) novaPagina(); }
+  function texto(valor: string, tamanho = 10, negrito = false, cor = TINTA) {
+    const fonte = negrito ? forte : corpo;
+    for (const linha of quebrarTexto(valor, fonte, tamanho, CONTEUDO)) {
+      reservar(tamanho + 5);
+      pagina.drawText(linha, { x: MARGEM, y: y - tamanho, size: tamanho, font: fonte, color: cor });
+      y -= tamanho + 5;
+    }
+    y -= 3;
+  }
+  function link(rotulo: string, url: string, x: number) {
+    const tamanho = 9, largura = corpo.widthOfTextAtSize(rotulo, tamanho);
+    pagina.drawText(rotulo, { x, y: y - tamanho, size: tamanho, font: corpo, color: AZUL });
+    pagina.drawLine({ start: { x, y: y - tamanho - 1 }, end: { x: x + largura, y: y - tamanho - 1 }, color: AZUL, thickness: 0.5 });
+    pagina.node.addAnnot(doc.context.register(doc.context.obj({
+      Type: "Annot", Subtype: "Link", Rect: [x, y - 12, x + largura, y + 2],
+      Border: [0, 0, 0], A: { Type: "Action", S: "URI", URI: PDFHexString.fromText(url) },
+    })));
+    return x + largura + 24;
   }
 
-  let y = novaPagina(true);
-  let pagina = paginas[paginas.length - 1];
-  y = cabecalhoTabela(pagina, fontes, y);
+  const ordenadas = [...vendas].sort((a, b) => a.created_at.localeCompare(b.created_at));
+  const total = ordenadas.reduce((soma, v) => soma + Math.round(v.valor * 100), 0) / 100;
+  texto("Relatório de vendas", 24, true);
+  texto(recorte.periodo === "tudo" ? "Todo o período" : rotularMes(recorte.periodo), 13, true);
+  texto(`Produtos: ${recorte.produtos.length ? recorte.produtos.join(", ") : "Todos"}`, 9, false, NEUTRO);
+  texto(`Turmas: ${recorte.turmas.length ? recorte.turmas.join(", ") : "Todas"}`, 9, false, NEUTRO);
+  if (recorte.busca) texto(`Busca: ${recorte.busca}`, 9, false, NEUTRO);
+  y -= 8;
+  texto(`${ordenadas.length} ${ordenadas.length === 1 ? "venda" : "vendas"} no recorte · ${formatarMoeda(total)}`, 13, true);
+  texto("Datas de registro no painel. Valores finais das vendas, após descontos.", 9, false, NEUTRO);
+  y -= 8;
 
-  // Da mais antiga para a mais recente: um relatório se lê no sentido do tempo.
-  const ordenadas = [...vendas].sort((a, b) =>
-    a.created_at.localeCompare(b.created_at),
-  );
-
-  ordenadas.forEach((venda, i) => {
-    const linhas = quebrarTexto(
-      COLUNAS[2].valor(venda), fontes.corpo, 8.5, COLUNAS[2].largura - 16,
-    );
-    let lidas = 0;
-    while (lidas < linhas.length) {
-      if (y - ALTURA_LINHA < PISO) {
-        y = novaPagina(false);
-        pagina = paginas[paginas.length - 1];
-        y = cabecalhoTabela(pagina, fontes, y);
-      }
-      const capacidade = Math.max(1, Math.floor((y - PISO - 8) / 11));
-      const trecho = linhas.slice(lidas, lidas + capacidade);
-      y -= linhaVenda(pagina, fontes, venda, y, i % 2 === 1, trecho, lidas > 0);
-      lidas += trecho.length;
+  const larguras = [78, CONTEUDO - 181, 103];
+  function cabecalhoTabela() {
+    reservar(45);
+    pagina.drawRectangle({ x: MARGEM, y: y - 23, width: CONTEUDO, height: 23, color: NAVY });
+    let x = MARGEM + 8;
+    ["DATA", "COMPRADOR", "VALOR TOTAL"].forEach((valor, i) => {
+      pagina.drawText(valor, { x, y: y - 15, size: 8, font: forte, color: BRANCO });
+      x += larguras[i];
+    });
+    y -= 23;
+  }
+  cabecalhoTabela();
+  ordenadas.forEach((venda, indice) => {
+    const campos = [formatarData(venda.created_at), venda.comprador_nome, formatarMoeda(venda.valor)]
+      .map((campo, i) => quebrarTexto(campo, corpo, 9, larguras[i] - 16));
+    const numeroLinhas = Math.max(...campos.map((campo) => campo.length));
+    let inicio = 0;
+    while (inicio < numeroLinhas) {
+      if (y - 23 < PISO) { novaPagina(); cabecalhoTabela(); }
+      const quantidade = Math.min(numeroLinhas - inicio, Math.max(1, Math.floor((y - PISO - 10) / 13)));
+      const altura = 10 + quantidade * 13;
+      if (indice % 2 === 1) pagina.drawRectangle({ x: MARGEM, y: y - altura, width: CONTEUDO, height: altura, color: PAPEL });
+      let x = MARGEM + 8;
+      campos.forEach((campo, coluna) => {
+        campo.slice(inicio, inicio + quantidade).forEach((linha, linhaIndice) => {
+          pagina.drawText(linha, { x, y: y - 14 - linhaIndice * 13, font: corpo, size: 9, color: TINTA });
+        });
+        x += larguras[coluna];
+      });
+      inicio += quantidade; y -= altura;
     }
   });
+  if (!ordenadas.length) { y -= 12; texto("Nenhuma venda aprovada neste recorte."); }
 
-  if (ordenadas.length === 0) {
-    escrever(pagina, "Nenhuma venda neste recorte.", {
-      x: MARGEM,
-      y: y - 26,
-      fonte: fontes.corpo,
-      tamanho: 10,
-      cor: NEUTRO,
+  if (ordenadas.length) {
+    novaPagina();
+    texto("Detalhes das vendas", 22, true);
+    texto("Os links abrem o painel e seus comprovantes. É necessário entrar no sistema.", 9, false, NEUTRO);
+    y -= 8;
+    ordenadas.forEach((venda, indice) => {
+      const campos: { valor: string; tamanho: number; negrito?: boolean }[] = [
+        { valor: `${String(indice + 1).padStart(2, "0")} · ${venda.comprador_nome}`, tamanho: 12, negrito: true },
+        { valor: `Data do registro: ${formatarData(venda.created_at)} · Valor: ${formatarMoeda(venda.valor)}`, tamanho: 10 },
+        { valor: `Situação: ${venda.pagamento_status === "aprovada" ? "Aprovada" : venda.pagamento_status === "expirada" ? "Expirada" : "Pendente"} · ${venda.modo_venda === "checkout" ? "Com Checkout Asaas" : "Sem Checkout"}`, tamanho: 9 },
+        { valor: `Produtos: ${venda.itens?.length ? venda.itens.map((item) => item.produto_nome).join(" + ") : venda.produto_nome}`, tamanho: 10 },
+        { valor: `Turma: ${venda.turma_nome || "Não informada"}`, tamanho: 9 },
+        { valor: `Telefone: ${venda.comprador_telefone || "Não informado"} · E-mail: ${venda.comprador_email || "Não informado"}`, tamanho: 9 },
+      ];
+      if (venda.desconto_tipo && venda.desconto_tipo !== "nenhum") {
+        campos.push({ valor: `Valor original: ${formatarMoeda(venda.valor_bruto)} · Desconto: ${venda.desconto_tipo === "percentual" ? `${venda.desconto_valor}%` : formatarMoeda(venda.desconto_valor)}`, tamanho: 9 });
+        if (venda.desconto_observacao) campos.push({ valor: `Observação do desconto: ${venda.desconto_observacao}`, tamanho: 9 });
+      }
+      campos.push({ valor: `Registro: ${venda.id}`, tamanho: 8 });
+      if (venda.asaas_pagamento_id) campos.push({ valor: `Cobrança Asaas: ${venda.asaas_pagamento_id}`, tamanho: 8 });
+      const links = linksRelatorio(venda, opcoes.origem);
+      if (!links.comprovante) campos.push({ valor: "Comprovante: não disponível.", tamanho: 9 });
+      const altura = campos.reduce((soma, campo) => soma + quebrarTexto(campo.valor, campo.negrito ? forte : corpo, campo.tamanho, CONTEUDO).length * (campo.tamanho + 5) + 3, 0) + 42;
+      // Fichas que cabem em uma página ficam inteiras; textos excepcionais
+      // continuam na página seguinte sem cortes nem sobreposição do rodapé.
+      reservar(Math.min(altura, TOPO - PISO));
+      campos.forEach((campo) => texto(campo.valor, campo.tamanho, campo.negrito));
+      if (links.venda) {
+        reservar(20);
+        const x = link("Abrir venda", links.venda, MARGEM);
+        if (links.comprovante) link("Abrir comprovante", links.comprovante, x);
+        y -= 22;
+      }
+      y -= 10;
+      if (y > PISO) pagina.drawLine({ start: { x: MARGEM, y }, end: { x: LARGURA - MARGEM, y }, color: PAPEL, thickness: 1 });
+      y -= 12;
     });
-    y -= 40;
   }
-
-  // O total nunca fica órfão numa página sozinho sem caber inteiro.
-  if (y - ALTURA_TOTAL - 16 < PISO) {
-    y = novaPagina(false);
-    pagina = paginas[paginas.length - 1];
-  }
-
-  const total = ordenadas.reduce((soma, v) => soma + v.valor, 0);
-  blocoTotal(pagina, fontes, total, ordenadas.length, y - 16);
-
-  rodapes(paginas, fontes);
-
+  const paginas = doc.getPages();
+  paginas.forEach((p, i) => {
+    p.drawRectangle({ x: 0, y: ALTURA - 72, width: LARGURA, height: 72, color: NAVY });
+    p.drawRectangle({ x: 0, y: ALTURA - 75, width: LARGURA, height: 3, color: VERMELHO });
+    p.drawImage(logo, { x: MARGEM - 5, y: ALTURA - 62, width: 34, height: 45 });
+    p.drawText("Prova Oral | Suporte 24H", { x: MARGEM + 38, y: ALTURA - 32, font: forte, size: 13, color: BRANCO });
+    p.drawText(`RELATÓRIO DE VENDAS · Emitido em ${DATA_HORA.format(geradoEm)}`, { x: MARGEM + 38, y: ALTURA - 49, font: corpo, size: 8, color: BRANCO });
+    p.drawText("Controle de Vendas - Prova Oral Suporte 24H", { x: MARGEM, y: 35, size: 8, font: corpo, color: NEUTRO });
+    const rodape = `Página ${i + 1} de ${paginas.length}`;
+    p.drawText(rodape, { x: LARGURA - MARGEM - corpo.widthOfTextAtSize(rodape, 8), y: 35, size: 8, font: corpo, color: NEUTRO });
+  });
   return doc.save();
 }
 
-/** relatorio-vendas-setembro-2026-2026-09-09.pdf */
 export function nomeArquivoRelatorio(periodo: string, hoje = new Date()): string {
   const data = hoje.toISOString().slice(0, 10);
-  const trecho =
-    periodo === "tudo"
-      ? "completo"
-      : rotularMes(periodo)
-          .toLowerCase()
-          .normalize("NFD")
-          .replace(/[̀-ͯ]/g, "")
-          .replace(/\s+/g, "-");
+  const trecho = periodo === "tudo" ? "completo" : rotularMes(periodo).toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "-");
   return `relatorio-vendas-${trecho}-${data}.pdf`;
 }

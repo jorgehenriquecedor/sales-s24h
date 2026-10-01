@@ -27,7 +27,8 @@ export default async function PaginaVendas({
         titulo="Vendas"
         descricao="Acompanhe cada checkout, aprovação e comprovante de pagamento."
       />
-      <ListaVendas vendas={vendas} produtos={produtos} turmas={turmas} filtros={filtros} status={status} asaasAtivo={asaasConfigurado()} />
+      <ListaVendas vendas={vendas} produtos={produtos} turmas={turmas} filtros={filtros} status={status} asaasAtivo={asaasConfigurado()}
+        vendaInicialId={typeof params.venda === "string" ? params.venda : null} />
     </div>
   );
 }

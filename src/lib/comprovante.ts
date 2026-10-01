@@ -1,5 +1,14 @@
 export const BUCKET_COMPROVANTES = "comprovantes";
 
+export function urlReciboAsaasConfiavel(url: string | null): boolean {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" && !parsed.username && !parsed.password &&
+      (parsed.hostname === "asaas.com" || parsed.hostname.endsWith(".asaas.com"));
+  } catch { return false; }
+}
+
 export const TIPOS_ACEITOS = [
   "image/png",
   "image/jpeg",
