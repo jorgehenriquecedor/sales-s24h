@@ -20,6 +20,7 @@ O Supabase Auth deste projeto não aceita cadastro público. É necessário ter 
 
 ## Comportamento
 
+- Na venda com Checkout, somente produtos e turma são obrigatórios no painel. Nome, e-mail e telefone são preenchidos pelo comprador no Asaas: a criação não envia `customer` nem `customerData`. Até a confirmação, a venda exibe **Aguardando dados do comprador**. Os eventos de pagamento consultam `/customers/{id}` e atualizam os dados da venda vinculada; o celular tem preferência sobre o telefone fixo. Se a consulta falhar, o evento não é marcado como processado e poderá ser reenviado. A migração `20261001180000_comprador_checkout.sql` aplica essas regras também no banco.
 - Ao clicar em **Nova venda**, escolha **Com Checkout** ou **Sem Checkout**. Com a integração configurada, o primeiro modo gera um Checkout único, com Pix e cartão, válido por 1440 minutos. Sem a integração, apenas o modo manual fica disponível.
 - No modo manual, a venda começa **Pendente** e passa a **Aprovada** ao anexar o comprovante. Se o comprovante for removido, volta a **Pendente**. Um anexo manual em venda com Checkout não confirma o pagamento Asaas.
 - Uma venda pode conter até 20 produtos. O banco soma os preços cadastrados, aplica um desconto percentual ou fixo e guarda preços, valor bruto, desconto, observação e valor final. O valor não é aceito do formulário. O Checkout recebe os itens com o desconto rateado em centavos, de modo que sua soma corresponde ao valor final da venda.

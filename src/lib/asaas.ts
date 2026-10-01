@@ -1,6 +1,7 @@
 import "server-only";
 import { distribuirValor } from "./descontos";
 import { credenciaisAsaas } from "./integracoes";
+import type { ClienteAsaas } from "./comprador-asaas";
 
 export type DadosCheckout = {
   vendaId: string;
@@ -100,10 +101,15 @@ export async function cancelarCheckout(id: string) {
 
 export type PagamentoAsaas = {
   id: string;
+  customer?: string | null;
   status?: string;
   checkoutSession?: string | null;
   transactionReceiptUrl?: string | null;
 };
+
+export async function buscarCliente(id: string) {
+  return requisicaoAsaas<ClienteAsaas>(`/customers/${encodeURIComponent(id)}`);
+}
 
 export async function buscarPagamento(checkoutId: string) {
   const resposta = await requisicaoAsaas<{ data: PagamentoAsaas[] }>(

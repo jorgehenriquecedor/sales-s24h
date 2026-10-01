@@ -51,6 +51,7 @@ export function FormularioVenda({
   const calculo = calcularTotal(precos, desconto.tipo, desconto.valor);
   const total = calculo.ok ? calculo.final : bruto;
   const prefixo = venda?.id ?? "nova";
+  const comCheckout = (venda?.modo_venda ?? modoVenda) === "checkout";
 
   function alternarProduto(id: string) {
     setSelecionados((atual) => atual.includes(id)
@@ -85,6 +86,12 @@ export function FormularioVenda({
       <input type="hidden" name="desconto_valor" value={desconto.valor} />
       <input type="hidden" name="desconto_observacao" value={desconto.observacao} />
 
+      {comCheckout ? (
+        <p className="rounded-xl border border-borda bg-papel p-3 text-sm text-neutro">
+          O comprador preencherá nome, e-mail e telefone no Checkout Asaas.
+          Esses dados serão trazidos automaticamente após a confirmação do pagamento.
+        </p>
+      ) : <>
       <div>
         <Rotulo htmlFor={`nome-${prefixo}`}>Nome completo do comprador</Rotulo>
         <Campo id={`nome-${prefixo}`} name="comprador_nome" required maxLength={200}
@@ -107,6 +114,7 @@ export function FormularioVenda({
         </div>
       </div>
 
+      </>}
       <fieldset>
         <legend className="mb-2 text-sm font-medium text-tinta">Produtos</legend>
         <div className="grid max-h-48 gap-2 overflow-y-auto rounded-xl border border-borda-forte p-2 sm:grid-cols-2">
@@ -129,9 +137,9 @@ export function FormularioVenda({
       </fieldset>
 
       <div>
-        <Rotulo htmlFor={`turma-${prefixo}`} dica="opcional">Turma</Rotulo>
-        <Selecao id={`turma-${prefixo}`} name="turma_id" defaultValue={venda?.turma_id ?? ""}>
-          <option value="">Sem turma</option>
+        <Rotulo htmlFor={`turma-${prefixo}`} dica={comCheckout ? "obrigatória" : "opcional"}>Turma</Rotulo>
+        <Selecao id={`turma-${prefixo}`} name="turma_id" required={comCheckout} defaultValue={venda?.turma_id ?? ""}>
+          <option value="">{comCheckout ? "Selecione a turma" : "Sem turma"}</option>
           {turmasVisiveis.map((turma) => (
             <option key={turma.id} value={turma.id}>
               {turma.nome}{turma.arquivado ? " (arquivada)" : ""}

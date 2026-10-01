@@ -41,8 +41,9 @@ function lerCampos(formData: FormData): CamposVenda {
   };
 }
 
-function validar(campos: CamposVenda): string | null {
-  if (!campos.comprador_nome) return "Informe o nome completo do comprador.";
+function validar(campos: CamposVenda, comCheckout: boolean): string | null {
+  if (!comCheckout && !campos.comprador_nome) return "Informe o nome completo do comprador.";
+  if (comCheckout && !campos.turma_id) return "Selecione a turma da venda com checkout.";
   if (campos.produto_ids.length < 1 || campos.produto_ids.length > 20) return "Selecione entre 1 e 20 produtos.";
   if (new Set(campos.produto_ids).size !== campos.produto_ids.length) return "Um produto não pode aparecer duas vezes.";
   if (campos.produto_ids.some((id) => !/^[0-9a-f-]{36}$/i.test(id))) return "Produto inválido.";
@@ -77,7 +78,7 @@ export async function criarVenda(
     return { erro: "A integração Asaas ainda não está configurada. Escolha Sem Checkout ou configure o Asaas." };
   }
   const campos = lerCampos(formData);
-  const invalido = validar(campos);
+  const invalido = validar(campos, modo === "checkout");
   if (invalido) return { erro: invalido };
 
   const supabase = await createClient();
@@ -138,10 +139,12 @@ export async function atualizarVenda(
   if (!id) return { erro: "Venda não identificada." };
 
   const campos = lerCampos(formData);
-  const invalido = validar(campos);
+  const supabase = await createClient();
+  const { data: venda } = await supabase.from("vendas").select("modo_venda").eq("id", id).maybeSingle();
+  if (!venda) return { erro: "Venda não encontrada." };
+  const invalido = validar(campos, venda.modo_venda === "checkout");
   if (invalido) return { erro: invalido };
 
-  const supabase = await createClient();
   const { error } = await supabase.rpc("atualizar_venda_com_produtos", {
     p_id: id,
     ...parametros(campos),

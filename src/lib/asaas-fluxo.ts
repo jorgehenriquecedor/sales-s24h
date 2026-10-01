@@ -1,6 +1,7 @@
 import "server-only";
 import { adminClient } from "@/lib/supabase/admin";
-import { buscarPagamento, cancelarCheckout, criarCheckout, type PagamentoAsaas } from "./asaas";
+import { buscarCliente, buscarPagamento, cancelarCheckout, criarCheckout, type PagamentoAsaas } from "./asaas";
+import { dadosCompradorAsaas } from "./comprador-asaas";
 import { BUCKET_COMPROVANTES } from "./comprovante";
 
 type VendaCheckout = {
@@ -105,9 +106,19 @@ export async function gerarCheckout(vendaId: string) {
 type EventoAsaas = {
   id: string;
   event: string;
-  checkout?: { id?: string };
+  checkout?: { id?: string; customer?: string | null };
   payment?: PagamentoAsaas & { externalReference?: string | null };
 };
+
+async function sincronizarComprador(vendaId: string, clienteId?: string | null) {
+  // Falhas ficam sem confirmação do evento para que o webhook possa tentar novamente.
+  if (!clienteId) throw new Error("O Asaas ainda não disponibilizou o cliente do checkout.");
+  const cliente = await buscarCliente(clienteId);
+  if (cliente.id !== clienteId) throw new Error("Cliente retornado pelo Asaas não corresponde ao pagamento.");
+  const { error } = await adminClient().from("vendas")
+    .update(dadosCompradorAsaas(cliente)).eq("id", vendaId).eq("modo_venda", "checkout");
+  if (error) throw error;
+}
 
 function reciboConfiavel(url: string) {
   try {
@@ -169,6 +180,8 @@ export async function processarEventoAsaas(evento: EventoAsaas) {
     if (!tentativa) throw new Error("Checkout ainda não vinculado à venda.");
 
     if (evento.event === "CHECKOUT_PAID") {
+      const pagamento = await buscarPagamento(checkoutId);
+      await sincronizarComprador(tentativa.venda_id, pagamento?.customer || evento.checkout?.customer);
       const { data: vendaAtual } = await admin.from("vendas")
         .select("asaas_checkout_id").eq("id", tentativa.venda_id).single();
       const { error } = await admin.from("asaas_checkouts")
@@ -188,7 +201,6 @@ export async function processarEventoAsaas(evento: EventoAsaas) {
           console.error("Checkout concorrente precisa de cancelamento", erroCancelamento);
         }
       }
-      const pagamento = await buscarPagamento(checkoutId);
       if (pagamento) await vincularRecibo(tentativa.venda_id, pagamento);
     } else {
       const status = evento.event === "CHECKOUT_EXPIRED" ? "expirada" : "cancelada";
@@ -223,6 +235,7 @@ export async function processarEventoAsaas(evento: EventoAsaas) {
       }
     }
     if (!tentativa) return;
+    await sincronizarComprador(tentativa.venda_id, pagamento.customer);
     const { error } = await admin.from("vendas").update({ pagamento_status: "aprovada" })
       .eq("id", tentativa.venda_id);
     if (error) throw error;

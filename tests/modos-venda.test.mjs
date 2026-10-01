@@ -91,4 +91,39 @@ const { rows: [confirmada] } = await db.query(
 assert.equal(confirmada.pagamento_status, "aprovada");
 console.log("✓ Anexo manual não aprova Checkout; só a confirmação do servidor aprova");
 
+const compradorCheckout = migration("20261001180000_comprador_checkout.sql");
+await db.exec(compradorCheckout);
+await db.exec(compradorCheckout);
+const { rows: [turma] } = await db.query("insert into public.turmas(nome) values ('Turma A') returning id");
+await db.query("select set_config('app.role','authenticated',false)");
+await db.exec("set role authenticated");
+await assert.rejects(criar("checkout"), /Selecione a turma/);
+const criarCheckout = (produtos, turmaId) => db.query(`
+  select public.criar_venda_com_modo('', '', '', $1::uuid[], $2, 'nenhum', 0, null, 'checkout') as id
+`, [produtos, turmaId]);
+await assert.rejects(criarCheckout([], turma.id));
+await assert.rejects(criarCheckout([p.id], '99999999-9999-4999-8999-999999999999'), /Turma não encontrada/);
+const { rows: [semComprador] } = await criarCheckout([p.id], turma.id);
+const consultar = async () => (await db.query(
+  'select comprador_nome, comprador_email, comprador_telefone, turma_id, valor, pagamento_status from public.vendas where id=$1',
+  [semComprador.id],
+)).rows[0];
+assert.deepEqual(await consultar(), {
+  comprador_nome: 'Aguardando dados do comprador', comprador_email: '', comprador_telefone: '',
+  turma_id: turma.id, valor: '100.00', pagamento_status: 'pendente',
+});
+await assert.rejects(db.query(`
+  select public.atualizar_venda_com_produtos($1,'','','',array[$2]::uuid[],null,'nenhum',0,null)
+`, [semComprador.id, p.id]), /Selecione a turma/);
+await db.query(`
+  select public.atualizar_venda_com_produtos($1,'Nome forjado','123','forjado@example.com',array[$2]::uuid[],$3,'nenhum',0,null)
+`, [semComprador.id, p.id, turma.id]);
+assert.equal((await consultar()).comprador_nome, 'Aguardando dados do comprador');
+assert.equal((await consultar()).comprador_email, '');
+assert.equal((await consultar()).comprador_telefone, '');
+await assert.rejects(db.query(`
+  select public.criar_venda_com_modo('', '', '', array[$1]::uuid[], null, 'nenhum', 0, null, 'manual')
+`, [p.id]), /Informe o nome/);
+await criar('manual');
+console.log('✓ Checkout exige produtos e turma, aceita comprador ausente e impede edição manual de seus dados');
 await db.close();
