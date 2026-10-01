@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { writeFile } from "node:fs/promises";
-import { PDFArray, PDFDict, PDFDocument, PDFHexString, PDFName, StandardFonts } from "pdf-lib";
+import { PDFArray, PDFDict, PDFDocument, PDFString, PDFName, StandardFonts } from "pdf-lib";
 import { gerarRelatorioPdf, linksRelatorio, nomeArquivoRelatorio, limparTexto, quebrarTexto } from "../src/lib/pdf.ts";
 import { buscarVendas } from "../src/lib/filtros.ts";
 import { urlReciboAsaasConfiavel } from "../src/lib/comprovante.ts";
@@ -46,7 +46,9 @@ await teste("anotações clicáveis apontam para cada venda e comprovante, sem U
       const rect = annot.lookup(PDFName.of("Rect"), PDFArray).asArray().map((n) => Number(n.toString()));
       assert.ok(rect[0] >= 40 && rect[2] < 556 && rect[1] >= 65 && rect[3] <= 742);
       const action = annot.lookup(PDFName.of("A"), PDFDict);
-      urls.push(action.lookup(PDFName.of("URI"), PDFHexString).decodeText());
+      const uri = action.lookup(PDFName.of("URI"), PDFString);
+      assert.ok([...uri.asBytes()].every((byte) => byte >= 32 && byte <= 126), "URI deve usar bytes ASCII sem BOM ou NUL, compatíveis com PDFium");
+      urls.push(uri.decodeText());
     }
   }
   assert.deepEqual(urls, [

@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { PDFDocument, PDFHexString, StandardFonts, rgb, type PDFFont } from "pdf-lib";
+import { PDFDocument, PDFString, StandardFonts, rgb, type PDFFont } from "pdf-lib";
 import type { Venda } from "./types";
 import { rotularMes } from "./filtros";
 import { formatarData, formatarMoeda } from "./format";
@@ -92,7 +92,9 @@ export async function gerarRelatorioPdf(
     pagina.drawLine({ start: { x, y: y - tamanho - 1 }, end: { x: x + largura, y: y - tamanho - 1 }, color: AZUL, thickness: 0.5 });
     pagina.node.addAnnot(doc.context.register(doc.context.obj({
       Type: "Annot", Subtype: "Link", Rect: [x, y - 12, x + largura, y + 2],
-      Border: [0, 0, 0], A: { Type: "Action", S: "URI", URI: PDFHexString.fromText(url) },
+      // URI actions require byte strings. UTF-16 inserts NUL bytes that
+      // PDFium readers can interpret as a truncated, invalid address.
+      Border: [0, 0, 0], A: { Type: "Action", S: "URI", URI: PDFString.of(url) },
     })));
     return x + largura + 24;
   }
