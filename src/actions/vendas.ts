@@ -73,7 +73,7 @@ export async function criarVenda(
 ): Promise<ResultadoVenda> {
   const modo = String(formData.get("modo_venda") ?? "");
   if (modo !== "manual" && modo !== "checkout") return { erro: "Escolha Com Checkout ou Sem Checkout." };
-  if (modo === "checkout" && !asaasConfigurado()) {
+  if (modo === "checkout" && !(await asaasConfigurado())) {
     return { erro: "A integração Asaas ainda não está configurada. Escolha Sem Checkout ou configure o Asaas." };
   }
   const campos = lerCampos(formData);
@@ -114,7 +114,7 @@ export async function gerarCheckoutNovamente(
 ): Promise<Resultado> {
   const id = String(formData.get("id") ?? "");
   if (!/^[0-9a-f-]{36}$/i.test(id)) return { erro: "Venda inválida." };
-  if (!asaasConfigurado()) return { erro: "A integração Asaas ainda não foi configurada." };
+  if (!(await asaasConfigurado())) return { erro: "A integração Asaas ainda não foi configurada." };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { erro: "Faça login novamente." };

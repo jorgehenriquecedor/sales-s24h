@@ -2,6 +2,7 @@
  * Roda todas as suítes em sequência. `npm test`.
  */
 const suites = [
+  ["Configurações, permissões e integração", "./configuracoes.test.mts"],
   ["Lógica de filtros, períodos e valores", "./logica.test.mts"],
   ["Exportação de relatório em PDF", "./pdf.test.mts"],
   ["Schema do banco (Postgres real via PGlite)", "./schema.test.mjs"],

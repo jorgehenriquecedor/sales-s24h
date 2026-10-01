@@ -1,12 +1,20 @@
 # Integração Asaas no Sales-S24H
 
-## Ativação no Sandbox
+## Ativação pelo painel
 
 1. Crie uma conta em [sandbox.asaas.com](https://sandbox.asaas.com/) e, como administrador, gere uma chave em **Integrações → Chaves de API**. Ela aparece apenas uma vez. Não a coloque no código ou em mensagens.
-2. Na Vercel, configure `ASAAS_API_KEY` como **Secret** no ambiente Production. `ASAAS_AMBIENTE=sandbox`, `ASAAS_CALLBACK_BASE_URL=https://controle-vendas-s24h.vercel.app` e `SUPABASE_SERVICE_ROLE_KEY` já estão preparados no projeto.
-3. Gere um token aleatório de pelo menos 32 caracteres, sem espaços, e configure o mesmo valor como **Secret** `ASAAS_WEBHOOK_TOKEN` na Vercel e como **Auth Token** do webhook no Asaas.
-4. No Asaas Sandbox, crie um webhook para `https://controle-vendas-s24h.vercel.app/api/asaas/webhook`, API v3, envio sequencial, com os eventos `CHECKOUT_PAID`, `CHECKOUT_EXPIRED`, `CHECKOUT_CANCELED`, `PAYMENT_CONFIRMED` e `PAYMENT_RECEIVED`.
-5. Faça um novo deploy da Vercel após adicionar as variáveis. Cadastre produto e uma venda de teste. Abra o checkout, simule o pagamento no Sandbox e verifique o status e o comprovante no painel.
+2. Na conta administradora do painel, abra **Configurações → Integrações → Adicionar nova integração → Asaas**.
+3. Escolha Sandbox ou Produção, informe a chave e o e-mail de avisos. O token do webhook é opcional: se vazio, o sistema gera um token seguro automaticamente.
+4. Ao confirmar, o painel valida a chave, cadastra ou atualiza o webhook para `/api/asaas/webhook`, API v3, envio sequencial, com os eventos `CHECKOUT_PAID`, `CHECKOUT_EXPIRED`, `CHECKOUT_CANCELED`, `PAYMENT_CONFIRMED` e `PAYMENT_RECEIVED`. A confirmação só aparece após salvar a integração.
+5. Em Sandbox, cadastre uma venda de teste e simule o pagamento para validar a confirmação e o comprovante. É necessário ter a chave real para testar a conexão completa. A configuração pelo painel não exige novo deploy.
+
+### Preparação do servidor
+
+Execute `supabase/migrations/20261001150000_configuracoes.sql`. A tabela `integracoes` é acessível apenas pelo serviço do servidor. As credenciais usam AES-256-GCM com `INTEGRACOES_CHAVE` (32 bytes aleatórios em hexadecimal, segredo exclusivo da Vercel). Preserve essa chave; trocá-la exige recifrar os dados existentes. `SUPABASE_SERVICE_ROLE_KEY` e `ASAAS_CALLBACK_BASE_URL` continuam no servidor. Variáveis Asaas legadas são usadas somente quando não existe integração ativa no banco.
+
+`PAINEL_ADMIN_ID` pode definir o UUID do proprietário; o valor padrão é a conta proprietária do Sales-S24H. Páginas e ações administrativas verificam esse ID no servidor. Em **Configurações → Logins**, o proprietário cria usuários confirmados com senha gerada, exibida apenas na resposta da criação. Não há envio automático de e-mail. Os usuários adicionais acessam vendas, cadastros e relatórios, mas não Logins nem Integrações.
+
+Logo oficial obtida de [asaas.com](https://www.asaas.com), recurso `https://cdn-boto.asaas.com/_next/static/media/header-logo.32m21jo32rre9.svg`, em 01/10/2026.
 
 O Supabase Auth deste projeto não aceita cadastro público. É necessário ter ao menos um usuário criado ou convidado no projeto Sales-S24H para entrar no painel e testar o fluxo.
 
@@ -23,6 +31,6 @@ O Supabase Auth deste projeto não aceita cadastro público. É necessário ter 
 
 ## Produção
 
-Depois de homologar o Sandbox, gere **outra** chave na conta Asaas de produção. Configure `ASAAS_AMBIENTE=producao`, substitua `ASAAS_API_KEY`, crie um webhook de produção com token próprio e execute novo deploy. Chaves, webhooks e pagamentos do Sandbox não são transferidos para produção.
+Gere a chave na conta Asaas de produção e escolha **Produção** no formulário. Chaves, webhooks e pagamentos do Sandbox não são transferidos para produção. Se já houver checkouts vinculados no painel, a troca de conta ou ambiente é bloqueada e exige migração do histórico; a rotação de chave na mesma conta é permitida quando o webhook atual continua acessível.
 
 Referências: [Checkout](https://docs.asaas.com/reference/criar-novo-checkout), [eventos de Checkout](https://docs.asaas.com/docs/eventos-para-checkout), [webhook de cobranças](https://docs.asaas.com/docs/webhook-para-cobrancas), [chaves de API](https://docs.asaas.com/docs/chaves-de-api).

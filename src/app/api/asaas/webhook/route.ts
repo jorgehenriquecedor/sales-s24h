@@ -1,15 +1,17 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { processarEventoAsaas } from "@/lib/asaas-fluxo";
+import { tokensWebhook } from "@/lib/integracoes";
 
 export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
-  const esperado = process.env.ASAAS_WEBHOOK_TOKEN;
   const recebido = request.headers.get("asaas-access-token") ?? "";
-  if (!esperado || !recebido ||
-      Buffer.byteLength(esperado) !== Buffer.byteLength(recebido) ||
-      !timingSafeEqual(Buffer.from(esperado), Buffer.from(recebido))) {
+  const esperados = await tokensWebhook();
+  const autorizado = esperados.some((esperado) => recebido &&
+    Buffer.byteLength(esperado) === Buffer.byteLength(recebido) &&
+    timingSafeEqual(Buffer.from(esperado), Buffer.from(recebido)));
+  if (!autorizado) {
     return NextResponse.json({ erro: "Não autorizado." }, { status: 401 });
   }
   if (Number(request.headers.get("content-length") ?? 0) > 128_000) {

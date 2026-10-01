@@ -8,6 +8,9 @@ import {
   IconePainel,
   IconeProduto,
   IconeSair,
+  IconeConfiguracoes,
+  IconeCadeado,
+  IconePlug,
   IconeTurma,
   IconeVendas,
 } from "./icones";
@@ -38,12 +41,10 @@ function estaAtivo(pathname: string, href: string) {
   return href === "/" ? pathname === "/" : pathname.startsWith(href);
 }
 
-export function Sidebar({
-  email,
-  sair,
-}: {
+export function Sidebar({ email, sair, isAdmin }: {
   email: string;
   sair: () => Promise<void>;
+  isAdmin: boolean;
 }) {
   const pathname = usePathname();
   const [aberta, setAberta] = useState(false);
@@ -86,6 +87,16 @@ export function Sidebar({
 
   const rodape = (
     <div className="border-t border-navy-borda px-4 py-4">
+      {isAdmin && <details open={pathname.startsWith("/configuracoes") || undefined} className="mb-4 text-sm text-navy-texto">
+        <summary className="flex cursor-pointer items-center gap-3 rounded-lg py-2 font-medium hover:text-white"><IconeConfiguracoes />Configurações</summary>
+        <nav aria-label="Configurações" className="mt-1 space-y-1 pl-3">
+          {[
+            { href: "/configuracoes/logins", rotulo: "Logins", icone: <IconeCadeado /> },
+            { href: "/configuracoes/integracoes", rotulo: "Integrações", icone: <IconePlug /> },
+          ].map((item) => <Link key={item.href} href={item.href} onClick={() => setAberta(false)} aria-current={estaAtivo(pathname, item.href) ? "page" : undefined}
+            className={`flex items-center gap-3 rounded-lg px-3 py-2 ${estaAtivo(pathname, item.href) ? "bg-brasa/12 text-brasa-claro" : "hover:bg-navy-alto hover:text-white"}`}>{item.icone}{item.rotulo}</Link>)}
+        </nav>
+      </details>}
       <p className="truncate text-xs text-navy-texto" title={email}>
         {email}
       </p>

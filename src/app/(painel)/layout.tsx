@@ -4,6 +4,7 @@ import { Logo } from "@/components/logo";
 import { getUsuario } from "@/lib/supabase/server";
 import { supabaseConfigurado } from "@/lib/supabase/env";
 import { sair } from "@/actions/auth";
+import { administrador } from "@/lib/permissoes";
 
 export const dynamic = "force-dynamic";
 
@@ -57,7 +58,7 @@ export default async function LayoutPainel({
 
   return (
     <div className="flex min-h-dvh flex-col lg:flex-row">
-      <Sidebar email={usuario.email ?? "Sessão ativa"} sair={sair} />
+      <Sidebar email={usuario.email ?? "Sessão ativa"} sair={sair} isAdmin={administrador(usuario)} />
       <main className="min-w-0 flex-1">
         <div className="mx-auto w-full max-w-[1400px] px-5 py-8 sm:px-8 lg:py-10">
           {children}

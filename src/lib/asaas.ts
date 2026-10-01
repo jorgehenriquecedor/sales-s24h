@@ -1,5 +1,6 @@
 import "server-only";
 import { distribuirValor } from "./descontos";
+import { credenciaisAsaas } from "./integracoes";
 
 export type DadosCheckout = {
   vendaId: string;
@@ -13,31 +14,21 @@ const BASES = {
   producao: "https://api.asaas.com/v3",
 } as const;
 
-function configuracao() {
-  const key = process.env.ASAAS_API_KEY;
-  if (!key) throw new Error("A chave ASAAS_API_KEY ainda não foi configurada.");
-  const ambiente = process.env.ASAAS_AMBIENTE;
-  if (ambiente !== "sandbox" && ambiente !== "producao") {
-    throw new Error("Configure ASAAS_AMBIENTE como sandbox ou producao.");
-  }
-  return { key, base: BASES[ambiente], ambiente };
+async function configuracao() {
+  const dados = await credenciaisAsaas();
+  if (!dados) throw new Error("A integração Asaas ainda não foi configurada.");
+  return { key: dados.key, base: BASES[dados.ambiente], ambiente: dados.ambiente, origem: dados.origem };
 }
 
-export function asaasConfigurado() {
-  return Boolean(
-    process.env.ASAAS_API_KEY &&
-      process.env.SUPABASE_SERVICE_ROLE_KEY &&
-      process.env.ASAAS_WEBHOOK_TOKEN &&
-      (process.env.ASAAS_AMBIENTE === "sandbox" ||
-        process.env.ASAAS_AMBIENTE === "producao"),
-  );
+export async function asaasConfigurado() {
+  return Boolean(await credenciaisAsaas());
 }
 
 export async function requisicaoAsaas<T>(
   caminho: string,
   init: RequestInit = {},
 ): Promise<T> {
-  const { key, base } = configuracao();
+  const { key, base } = await configuracao();
   const resposta = await fetch(`${base}${caminho}`, {
     ...init,
     headers: {
@@ -61,8 +52,8 @@ export async function requisicaoAsaas<T>(
 }
 
 export async function criarCheckout(dados: DadosCheckout) {
-  const origem = process.env.ASAAS_CALLBACK_BASE_URL;
-  if (!origem || !/^https:\/\//.test(origem)) {
+  const { origem, ambiente } = await configuracao();
+  if (!/^https:\/\//.test(origem)) {
     throw new Error("Configure ASAAS_CALLBACK_BASE_URL com a URL HTTPS do painel.");
   }
   const callback = (estado: string) =>
@@ -93,7 +84,6 @@ export async function criarCheckout(dados: DadosCheckout) {
     },
   );
   if (!checkout.id) throw new Error("O Asaas não retornou o ID do checkout.");
-  const { ambiente } = configuracao();
   return {
     id: checkout.id,
     url:

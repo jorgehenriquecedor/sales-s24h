@@ -113,6 +113,21 @@ export const IconeSair = (p: Props) => (
   </Base>
 );
 
+export const IconeConfiguracoes = (p: Props) => (
+  <Base {...p}>
+    <circle cx="12" cy="12" r="3" />
+    <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-1.8 1.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.1h-2.5V20a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1-1.8-1.8.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H6v-2.5h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1 1.8-1.8.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.6V5h2.5v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1 1.8 1.8-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.1v2.5h-.1a1.7 1.7 0 0 0-1.6 1Z" />
+  </Base>
+);
+
+export const IconeCadeado = (p: Props) => (
+  <Base {...p}><rect x="5" y="10" width="14" height="10" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></Base>
+);
+
+export const IconePlug = (p: Props) => (
+  <Base {...p}><path d="M9 7v5M15 7v5M7 12h10M12 12v8M8 20h8" /><path d="M7 4v3M17 4v3" /></Base>
+);
+
 export const IconeLixeira = (p: Props) => (
   <Base {...p}>
     <path d="M4 6.5h16M9.5 6.5V4.8A.8.8 0 0 1 10.3 4h3.4a.8.8 0 0 1 .8.8v1.7" />
