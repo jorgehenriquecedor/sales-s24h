@@ -9,6 +9,8 @@ export function FormularioIntegracao({ configuracao }: { configuracao: { ativa: 
   const [aberta, setAberta] = useState(false);
   const [selecionada, setSelecionada] = useState(false);
   const [aviso, setAviso] = useState(0);
+  const [ambienteEscolhido, setAmbienteEscolhido] = useState(configuracao?.ambiente ?? "sandbox");
+  const trocandoAmbiente = Boolean(configuracao?.ativa && ambienteEscolhido !== configuracao.ambiente);
   const [estado, acao, pendente] = useActionState<ResultadoConfiguracao, FormData>(async (anterior, dados) => {
     const resposta = await salvarIntegracaoAsaas(anterior, dados);
     if (resposta.ok) { setAberta(false); setAviso(Date.now()); }
@@ -21,9 +23,10 @@ export function FormularioIntegracao({ configuracao }: { configuracao: { ativa: 
     <Modal aberto={aberta} aoFechar={() => { if (!pendente) setAberta(false); }} titulo={selecionada ? "Conectar Asaas" : "Adicionar integração"} descricao={selecionada ? "Informe os dados da sua conta. O painel configurará a confirmação automática dos pagamentos." : "Selecione o serviço que deseja conectar."} largura="max-w-xl">
       {!selecionada ? <button type="button" onClick={() => setSelecionada(true)} className="flex w-full flex-wrap items-center gap-4 rounded-xl border border-borda bg-papel p-6 text-left hover:border-brasa"><Image src="/asaas.svg" alt="Asaas" width={140} height={24} className="box-content rounded-lg bg-[#0030b9] p-4" /><span className="text-sm text-neutro">Pagamentos e checkouts →</span></button> : <form action={acao} className="space-y-4">
         <Image src="/asaas.svg" alt="Asaas" width={140} height={24} className="mb-6 box-content rounded-lg bg-[#0030b9] p-4" />
-        <div><Rotulo htmlFor="ambiente">Ambiente</Rotulo><Selecao id="ambiente" name="ambiente" defaultValue={configuracao?.ambiente ?? "sandbox"}><option value="sandbox">Sandbox (testes)</option><option value="producao">Produção</option></Selecao></div>
-        <div><Rotulo htmlFor="api_key">Chave de API</Rotulo><Campo id="api_key" name="api_key" type="password" required={!configuracao?.ativa} placeholder={configuracao?.ativa ? "Deixe vazio para manter a chave salva" : "Cole a chave do Asaas"} autoComplete="off" /></div>
-        <div><Rotulo htmlFor="webhook_token" dica="opcional">Token do webhook</Rotulo><Campo id="webhook_token" name="webhook_token" type="password" placeholder={configuracao?.ativa ? "Deixe vazio para manter o token salvo" : "Será gerado automaticamente"} autoComplete="off" /></div>
+        <div><Rotulo htmlFor="ambiente">Ambiente</Rotulo><Selecao id="ambiente" name="ambiente" value={ambienteEscolhido} onChange={(e) => setAmbienteEscolhido(e.target.value)}><option value="sandbox">Sandbox (testes)</option><option value="producao">Produção</option></Selecao></div>
+        {trocandoAmbiente && <p className="rounded-xl bg-papel p-3 text-sm text-neutro">Informe a chave da conta de Produção. Os registros de teste serão preservados; para cobrar de verdade, crie uma nova venda após confirmar a integração.</p>}
+        <div><Rotulo htmlFor="api_key">Chave de API</Rotulo><Campo id="api_key" name="api_key" type="password" required={!configuracao?.ativa || trocandoAmbiente} placeholder={trocandoAmbiente ? "Cole a chave do novo ambiente" : configuracao?.ativa ? "Deixe vazio para manter a chave salva" : "Cole a chave do Asaas"} autoComplete="off" /></div>
+        <div><Rotulo htmlFor="webhook_token" dica="opcional">Token do webhook</Rotulo><Campo id="webhook_token" name="webhook_token" type="password" placeholder={trocandoAmbiente || !configuracao?.ativa ? "Será gerado automaticamente" : "Deixe vazio para manter o token salvo"} autoComplete="off" /></div>
         <div><Rotulo htmlFor="email">E-mail para avisos do webhook</Rotulo><Campo id="email" name="email" type="email" required defaultValue={configuracao?.email ?? ""} placeholder="financeiro@empresa.com" /></div>
         <p className="text-xs text-neutro">Ao confirmar, o painel conecta sua conta e configura o recebimento das confirmações de pagamento. As chaves salvas não são exibidas novamente.</p>
         {estado.erro && <div role="alert" className="rounded-xl bg-brasa-fraco px-4 py-3 text-sm text-brasa-escuro">{estado.erro}</div>}

@@ -19,5 +19,5 @@ export async function credenciaisAsaas(): Promise<CredenciaisAsaas | null> {
 export async function tokensWebhook(): Promise<string[]> {
   const data = await lerIntegracao();
   return [data?.segredo, data?.segredo_pendente].filter(Boolean).map((valor) => (JSON.parse(decifrar(valor)) as CredenciaisAsaas).token)
-    .concat(process.env.ASAAS_WEBHOOK_TOKEN ? [process.env.ASAAS_WEBHOOK_TOKEN] : []);
+    .concat(!data?.ativa && process.env.ASAAS_WEBHOOK_TOKEN ? [process.env.ASAAS_WEBHOOK_TOKEN] : []);
 }

@@ -32,6 +32,6 @@ O Supabase Auth deste projeto não aceita cadastro público. É necessário ter 
 
 ## Produção
 
-Gere a chave na conta Asaas de produção e escolha **Produção** no formulário. Chaves, webhooks e pagamentos do Sandbox não são transferidos para produção. Se já houver checkouts vinculados no painel, a troca de conta ou ambiente é bloqueada e exige migração do histórico; a rotação de chave na mesma conta é permitida quando o webhook atual continua acessível.
+Gere a chave na conta Asaas de produção e escolha **Produção** no formulário. A passagem de Sandbox para Produção preserva vendas e checkouts identificados por ambiente pela migração `20261002010000_ambiente_asaas.sql`. A nova chave é obrigatória, e o token do webhook é renovado para isolar eventos de teste. Vendas de Sandbox não podem gerar novos checkouts em Produção; crie uma venda nova. Aguarde a conclusão de qualquer checkout em geração antes de salvar. A troca para outra conta ou o retorno ao Sandbox com histórico continuam bloqueados. A rotação de chave na mesma conta é permitida quando o webhook atual continua acessível.
 
 Referências: [Checkout](https://docs.asaas.com/reference/criar-novo-checkout), [eventos de Checkout](https://docs.asaas.com/docs/eventos-para-checkout), [webhook de cobranças](https://docs.asaas.com/docs/webhook-para-cobrancas), [chaves de API](https://docs.asaas.com/docs/chaves-de-api).

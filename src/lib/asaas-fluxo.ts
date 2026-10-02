@@ -52,7 +52,7 @@ export async function gerarCheckout(vendaId: string) {
     ? claim.eq("asaas_checkout_id", atual.asaas_checkout_id)
     : claim.is("asaas_checkout_id", null);
   const { data: reservada, error: erroReserva } = await claim.select("id").maybeSingle();
-  if (erroReserva || !reservada) throw new Error("Outra tentativa de checkout já foi iniciada.");
+  if (erroReserva || !reservada) throw new Error(erroReserva?.message || "Outra tentativa de checkout já foi iniciada.");
 
   let novoId: string | null = null;
   try {

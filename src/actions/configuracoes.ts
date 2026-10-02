@@ -47,9 +47,12 @@ export async function salvarIntegracaoAsaas(_anterior: ResultadoConfiguracao, da
   try {
     const anterior: CredenciaisAsaas | null = atual.segredo ? JSON.parse(decifrar(atual.segredo)) : null;
     const pendente: CredenciaisAsaas | null = atual.segredo_pendente ? JSON.parse(decifrar(atual.segredo_pendente)) : null;
+    const mudouAmbiente = Boolean(anterior && anterior.ambiente !== ambiente);
+    if (mudouAmbiente && !chaveInformada) return { erro: "Informe a chave de API do novo ambiente. Sandbox e Produção usam chaves diferentes." };
     const chave = chaveInformada || anterior?.key || "";
     if (chave.length < 20 || chave.length > 4096 || /\s/.test(chave)) return { erro: "Informe a chave de API do Asaas." };
-    const token = tokenInformado || anterior?.token || pendente?.token || `whsec_${randomBytes(32).toString("base64url")}`;
+    if (mudouAmbiente && tokenInformado === anterior?.token) return { erro: "Deixe o token vazio para gerar um token exclusivo para Produção." };
+    const token = tokenInformado || (mudouAmbiente ? null : anterior?.token || pendente?.token) || `whsec_${randomBytes(32).toString("base64url")}`;
     if (token === chave) return { erro: "O token do webhook deve ser diferente da chave de API." };
     // Recupera também um webhook criado antes de uma eventual falha local.
     const lista = await chamarAsaasConfig<{ data: WebhookAsaas[] }>(ambiente, chave, "/webhooks?limit=100");
@@ -57,7 +60,17 @@ export async function salvarIntegracaoAsaas(_anterior: ResultadoConfiguracao, da
     const existente = lista.data.find((w) => w.url === `${origem}/api/asaas/webhook`);
     const { count, error: erroContagem } = await admin.from("asaas_checkouts").select("id", { count: "exact", head: true });
     if (erroContagem) throw new Error("Não foi possível conferir os checkouts existentes.");
-    if (count && anterior && (anterior.ambiente !== ambiente || (chave !== anterior.key && !lista.data.some((w) => w.id === atual.webhook_id)))) {
+    const passagemParaProducao = anterior?.ambiente === "sandbox" && ambiente === "producao";
+    if (passagemParaProducao) {
+      const { count: semOrigem, error: erroOrigem } = await admin.from("asaas_checkouts")
+        .select("id", { count: "exact", head: true }).or("ambiente.is.null,ambiente.neq.sandbox");
+      const { count: emGeracao, error: erroGeracao } = await admin.from("vendas")
+        .select("id", { count: "exact", head: true }).not("asaas_checkout_reserva", "is", null);
+      if (erroOrigem || erroGeracao) throw new Error("Não foi possível conferir o ambiente das vendas existentes.");
+      if (semOrigem) return { erro: "Existem checkouts sem identificação de Sandbox. Confira a origem antes de trocar o ambiente." };
+      if (emGeracao) return { erro: "Há um checkout sendo gerado. Aguarde a conclusão antes de trocar o ambiente." };
+    }
+    if (!passagemParaProducao && count && anterior && (anterior.ambiente !== ambiente || (chave !== anterior.key && !lista.data.some((w) => w.id === atual.webhook_id)))) {
       return { erro: "Há checkouts vinculados à integração atual. A troca de conta ou ambiente exige migração para preservar o acompanhamento dessas vendas." };
     }
     const segredo = cifrar(JSON.stringify({ key: chave, token, ambiente, origem }));
