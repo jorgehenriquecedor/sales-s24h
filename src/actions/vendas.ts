@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { converterParaNumero } from "@/lib/format";
 import { BUCKET_COMPROVANTES } from "@/lib/comprovante";
 import { asaasConfigurado } from "@/lib/asaas";
-import { gerarCheckout } from "@/lib/asaas-fluxo";
+import { recuperarComprovanteAsaas, gerarCheckout } from "@/lib/asaas-fluxo";
 import type { Resultado } from "./produtos";
 
 const BUCKET = BUCKET_COMPROVANTES;
@@ -240,6 +240,26 @@ export async function removerComprovante(
     await supabase.storage.from(BUCKET).remove([venda.comprovante_path]);
   }
 
+  revalidarTudo();
+  return { ok: true };
+}
+
+export async function anexarComprovanteAsaas(
+  _anterior: Resultado,
+  formData: FormData,
+): Promise<Resultado> {
+  const id = String(formData.get("id") ?? "");
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return { erro: "Venda inválida." };
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { erro: "Faça login novamente." };
+  const { data: permitida } = await supabase.from("vendas").select("id").eq("id", id).maybeSingle();
+  if (!permitida) return { erro: "Venda não encontrada." };
+  try {
+    await recuperarComprovanteAsaas(id);
+  } catch (erro) {
+    return { erro: erro instanceof Error ? erro.message : "Não foi possível anexar o comprovante." };
+  }
   revalidarTudo();
   return { ok: true };
 }

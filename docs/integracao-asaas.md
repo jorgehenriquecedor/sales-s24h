@@ -27,7 +27,7 @@ O Supabase Auth deste projeto não aceita cadastro público. É necessário ter 
 - O Asaas envia eventos para o servidor. O navegador não precisa permanecer aberto. O painel aberto consulta o banco a cada 30 segundos para mostrar alterações que já chegaram pelo webhook.
 - Ao expirar, o registro da venda permanece. **Gerar checkout novamente** cria outra tentativa vinculada à mesma venda.
 - Um evento de expiração de tentativa antiga não altera o status da tentativa atual.
-- `CHECKOUT_PAID` aprova a venda. Eventos de cobrança complementam o comprovante. Se a URL do Asaas devolver PDF ou imagem, o arquivo é salvo no bucket privado da venda; quando devolver página HTML, a URL fica disponível no detalhe da venda.
+- `CHECKOUT_PAID` aprova a venda. Eventos de cobrança complementam o comprovante. PDFs e imagens são salvos no bucket privado. Se o Asaas retornar HTML, o servidor procura o link de download na página e anexa o PDF original, sem reconstruir a URL nem gerar outro recibo. Downloads e redirecionamentos são restritos ao Asaas e limitados a 20 MB. Falhas deixam o evento disponível para nova tentativa. Vendas já aprovadas podem recuperar o arquivo pelo botão **Anexar comprovante do Asaas**.
 - O token `asaas-access-token` é comparado antes de processar o webhook. IDs de eventos processados são guardados para idempotência.
 
 ## Produção

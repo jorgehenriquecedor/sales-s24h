@@ -3,6 +3,7 @@
 import { useActionState, useRef, useState, startTransition } from "react";
 import {
   atualizarVenda,
+  anexarComprovanteAsaas,
   excluirVenda,
   gerarCheckoutNovamente,
   registrarComprovante,
@@ -266,6 +267,7 @@ function BlocoComprovante({ venda }: { venda: Venda }) {
   );
 
   const [estadoRemocao, acaoRemocao] = useActionState(removerComprovante, VAZIO);
+  const [estadoAnexoAsaas, acaoAnexoAsaas] = useActionState(anexarComprovanteAsaas, VAZIO);
 
   const anexado = venda.status === "comprovante_anexado";
 
@@ -336,6 +338,13 @@ function BlocoComprovante({ venda }: { venda: Venda }) {
           Abrir comprovante no Asaas
         </a>
       )}
+      {venda.modo_venda === "checkout" && venda.pagamento_status === "aprovada" && !anexado && venda.asaas_comprovante_url && (
+        <form action={acaoAnexoAsaas} className="mt-3">
+          <input type="hidden" name="id" value={venda.id} />
+          <BotaoEnvio carregando="Anexando comprovante…">Anexar comprovante do Asaas</BotaoEnvio>
+          {estadoAnexoAsaas.erro && <Aviso>{estadoAnexoAsaas.erro}</Aviso>}
+        </form>
+      )}
 
       {anexado ? (
         <div className="mt-3 space-y-3">
@@ -395,7 +404,7 @@ function BlocoComprovante({ venda }: { venda: Venda }) {
             {venda.modo_venda === "manual"
               ? "Anexe uma imagem ou PDF do comprovante. A venda será aprovada automaticamente após o anexo."
               : venda.pagamento_status === "aprovada"
-              ? "O pagamento foi aprovado. Se o Asaas fornecer apenas uma página de comprovante, use o link acima ou anexe um arquivo manualmente."
+              ? "O pagamento foi aprovado. O PDF original será anexado assim que estiver disponível no Asaas. Você também pode tentar novamente pelo botão acima."
               : "O comprovante será anexado quando o Asaas o disponibilizar. Você também pode anexar uma imagem ou PDF manualmente."}
           </p>
           <SeletorArquivo

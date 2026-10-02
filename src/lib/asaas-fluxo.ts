@@ -2,7 +2,8 @@ import "server-only";
 import { adminClient } from "@/lib/supabase/admin";
 import { buscarCliente, buscarPagamento, cancelarCheckout, criarCheckout, type PagamentoAsaas } from "./asaas";
 import { dadosCompradorAsaas } from "./comprador-asaas";
-import { BUCKET_COMPROVANTES } from "./comprovante";
+import { BUCKET_COMPROVANTES, urlReciboAsaasConfiavel } from "./comprovante";
+import { baixarComprovanteAsaas } from "./comprovante-asaas";
 
 type VendaCheckout = {
   id: string;
@@ -120,46 +121,41 @@ async function sincronizarComprador(vendaId: string, clienteId?: string | null) 
   if (error) throw error;
 }
 
-function reciboConfiavel(url: string) {
-  try {
-    const parsed = new URL(url);
-    return parsed.protocol === "https:" &&
-      (parsed.hostname === "asaas.com" || parsed.hostname.endsWith(".asaas.com"));
-  } catch { return false; }
-}
-
 async function vincularRecibo(vendaId: string, pagamento: PagamentoAsaas) {
   const admin = adminClient();
   const url = pagamento.transactionReceiptUrl;
-  const campos = { asaas_pagamento_id: pagamento.id, ...(url && reciboConfiavel(url) ? { asaas_comprovante_url: url } : {}) };
+  const campos = { asaas_pagamento_id: pagamento.id, ...(url && urlReciboAsaasConfiavel(url) ? { asaas_comprovante_url: url } : {}) };
   const { error } = await admin.from("vendas").update(campos)
     .eq("id", vendaId).eq("pagamento_status", "aprovada");
   if (error) throw error;
-  if (!url || !reciboConfiavel(url)) return;
-  const { data: venda } = await admin.from("vendas")
-    .select("comprovante_path").eq("id", vendaId).single();
-  if (venda?.comprovante_path) return;
-
-  // O Asaas pode devolver uma página HTML. Só anexamos arquivo real aceito pelo Storage.
-  const resposta = await fetch(url, { redirect: "manual", signal: AbortSignal.timeout(10000) });
-  if (!resposta.ok) return;
-  const tipo = resposta.headers.get("content-type")?.split(";")[0] ?? "";
-  const extensoes: Record<string, string> = {
-    "application/pdf": "pdf", "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp",
-  };
-  const ext = extensoes[tipo];
-  const tamanho = Number(resposta.headers.get("content-length") ?? 0);
-  if (!ext || tamanho > 20 * 1024 * 1024) return;
-  const bytes = await resposta.arrayBuffer();
-  if (bytes.byteLength > 20 * 1024 * 1024) return;
-  const path = `${vendaId}/asaas-${pagamento.id}.${ext}`;
+  if (!url || !urlReciboAsaasConfiavel(url)) return;
+  const { data: venda, error: erroConsulta } = await admin.from("vendas")
+    .select("comprovante_path")
+    .eq("id", vendaId).single();
+  if (erroConsulta || !venda) throw new Error("Não foi possível consultar o anexo da venda.");
+  if (venda.comprovante_path) return;
+  const { bytes, tipo, extensao } = await baixarComprovanteAsaas(url);
+  const path = `${vendaId}/asaas-${pagamento.id}.${extensao}`;
   const { error: erroUpload } = await admin.storage.from(BUCKET_COMPROVANTES)
     .upload(path, bytes, { contentType: tipo, upsert: true });
   if (erroUpload) throw erroUpload;
   const { error: erroAnexo } = await admin.from("vendas")
-    .update({ comprovante_path: path, comprovante_nome: `Comprovante Asaas.${ext}` })
-    .eq("id", vendaId).eq("pagamento_status", "aprovada");
+    .update({ comprovante_path: path, comprovante_nome: `Comprovante Asaas.${extensao}` })
+    .eq("id", vendaId).eq("pagamento_status", "aprovada").is("comprovante_path", null);
   if (erroAnexo) throw erroAnexo;
+}
+
+/** Recupera o recibo já salvo quando o primeiro webhook só deixou o link. */
+export async function recuperarComprovanteAsaas(vendaId: string) {
+  const admin = adminClient();
+  const { data: venda, error } = await admin.from("vendas")
+    .select("asaas_pagamento_id, asaas_comprovante_url, comprovante_path, pagamento_status, modo_venda")
+    .eq("id", vendaId).single();
+  if (error || !venda) throw new Error("Venda não encontrada.");
+  if (venda.modo_venda !== "checkout" || venda.pagamento_status !== "aprovada") throw new Error("A venda ainda não foi aprovada pelo Asaas.");
+  if (venda.comprovante_path) return;
+  if (!venda.asaas_pagamento_id || !urlReciboAsaasConfiavel(venda.asaas_comprovante_url)) throw new Error("O Asaas ainda não disponibilizou o comprovante.");
+  await vincularRecibo(vendaId, { id: venda.asaas_pagamento_id, transactionReceiptUrl: venda.asaas_comprovante_url });
 }
 
 export async function processarEventoAsaas(evento: EventoAsaas) {

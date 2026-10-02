@@ -2,6 +2,7 @@
  * Roda todas as suítes em sequência. `npm test`.
  */
 const suites = [
+  ["Download do comprovante original Asaas", "./comprovante-asaas.test.mjs"],
   ["Comprador preenchido no Checkout Asaas", "./comprador-asaas.test.mjs"],
   ["Configurações, permissões e integração", "./configuracoes.test.mts"],
   ["Lógica de filtros, períodos e valores", "./logica.test.mts"],
